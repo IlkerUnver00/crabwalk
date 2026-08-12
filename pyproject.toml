@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crabwalk"
+version = "0.1.0"
+description = "EVTX lateral movement hunter: correlates Windows event logs into an attack timeline mapped to MITRE ATT&CK."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "İlker Ünver" }]
+keywords = ["dfir", "evtx", "mitre-attack", "threat-hunting", "lateral-movement", "incident-response", "windows", "security"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+dependencies = [
+    "evtx>=0.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/IlkerUnver00/crabwalk"
+Repository = "https://github.com/IlkerUnver00/crabwalk"
+Issues = "https://github.com/IlkerUnver00/crabwalk/issues"
+
+[project.scripts]
+crabwalk = "crabwalk.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crabwalk"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
