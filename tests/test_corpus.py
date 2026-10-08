@@ -76,7 +76,10 @@ def test_known_sample_detected(relpath: str, technique: str, rule_id: str):
         pytest.skip(f"missing sample: {relpath}")
     _, findings = hunt(iter_events([sample]))
     techniques = {t for f in findings for t in f.techniques}
-    rules = {f.rule_id for f in findings}
+    # A rule whose finding another rule already tells in full still fired; its
+    # finding is listed under that one (merge_overlaps), e.g. the CW-005 drop
+    # inside a CW-012 PsExec run.
+    rules = {f.rule_id for f in findings} | {m.rule_id for f in findings for m in f.merged}
     assert technique in techniques, f"{relpath}: expected {technique}, got {sorted(techniques)}"
     assert rule_id in rules, f"{relpath}: expected rule {rule_id}, got {sorted(rules)}"
 
@@ -88,7 +91,8 @@ def test_known_sample_does_not_trigger(relpath: str, rule_id: str):
     if not sample.is_file():
         pytest.skip(f"missing sample: {relpath}")
     _, findings = hunt(iter_events([sample]))
-    fired = [f.summary for f in findings if f.rule_id == rule_id]
+    # merged findings count too: a rule folded under another one still fired
+    fired = [x.summary for f in findings for x in (f, *f.merged) if x.rule_id == rule_id]
     assert not fired, f"{relpath}: {rule_id} should stay quiet, fired: {fired}"
 
 

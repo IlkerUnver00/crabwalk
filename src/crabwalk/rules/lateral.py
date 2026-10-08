@@ -19,7 +19,7 @@ from ..hosts import (
     short_host,
 )
 from ..sessions import MovementEdge, display_user
-from .base import Finding, HuntContext, Rule, ServiceInstall
+from .base import Finding, HuntContext, Rule, ServiceInstall, clip, share_label
 
 #: Service names dropped by common remote-execution tools.
 KNOWN_REMOTE_EXEC_SERVICES = re.compile(r"psexe|paexec|remcom|csexec|winexe", re.IGNORECASE)
@@ -40,6 +40,13 @@ def looks_like_remote_exec(install: ServiceInstall) -> bool:
     )
 
 
+def install_phrase(install: ServiceInstall) -> str:
+    """Narrative phrase for an install: 'installed service 'x' (c:\\x.exe)'."""
+    if install.source == "sysmon13":
+        return f"set service '{install.name}' to run {clip(install.image, 70)}"
+    return f"installed service '{install.name}' ({clip(install.image, 70)})"
+
+
 def credible_installs(ctx: HuntContext) -> list[ServiceInstall]:
     """Installs a correlation rule may lean on.
 
@@ -54,6 +61,25 @@ def credible_installs(ctx: HuntContext) -> list[ServiceInstall]:
     return [i for i in ctx.service_installs if i.source != "sysmon13" or looks_like_remote_exec(i)]
 
 _TASK_COMMAND = re.compile(r"<Command>([^<]+)</Command>", re.IGNORECASE)
+
+
+def task_command(event: Any) -> str | None:
+    """The first <Command> of a task's XML: TaskContent on a 4698 (created),
+    TaskContentNew on a 4702 (updated)."""
+    match = _TASK_COMMAND.search(str(event.get("TaskContent") or event.get("TaskContentNew") or ""))
+    return match.group(1).strip() if match else None
+
+
+def _ago(delta: timedelta) -> str:
+    """'42 min', '3 h', '2 days': a gap between two steps, for narratives."""
+    seconds = int(delta.total_seconds())
+    if seconds < 120:
+        return f"{seconds} s"
+    if seconds < 7200:
+        return f"{seconds // 60} min"
+    if seconds < 172800:
+        return f"{seconds // 3600} h"
+    return f"{seconds // 86400} days"
 
 
 def _inbound_edges_to(ctx: HuntContext, computer: str) -> list[MovementEdge]:
@@ -105,6 +131,7 @@ class PsExecPattern(Rule):
                     f"by {install.describe()}"
                     + (" — known remote-exec tool" if known_tool else "")
                 ),
+                action=f"{install_phrase(install)}, {delta}s after logging on",
                 evidence=[install.event],
                 src_ip=edge.src_ip,
                 src_host=edge.src_host,
@@ -160,6 +187,8 @@ class RdpChain(Rule):
                         f"{first.timestamp:%H:%M:%S}) -> {second.dst} ({second.user}, "
                         f"{second.timestamp:%H:%M:%S})"
                     ),
+                    action=(f"continued over RDP, {_ago(delta)} after {first.user} "
+                            f"reached {first.dst} over RDP from {first.src}"),
                     evidence=[e.event for e in (first, second) if e.event is not None],
                     src_ip=second.src_ip,
                     src_host=second.src_host or first.dst,
@@ -200,6 +229,9 @@ class PassTheHash(Rule):
                         f"Logon type 9 via seclogo with outbound credentials "
                         f"'{outbound}' (sekurlsa::pth signature)"
                     ),
+                    action=("started a process with injected credentials"
+                            + (f" for '{outbound}'" if outbound not in ("?", "-") else "")
+                            + " (logon type 9 via seclogo: the sekurlsa::pth pattern)"),
                     evidence=[event],
                 )
             elif self.privileged_ntlm and logon_type == "3" and package == "NTLM":
@@ -214,6 +246,7 @@ class PassTheHash(Rule):
                             f"{event.get('IpAddress') or '?'} "
                             f"(workstation: {event.get('WorkstationName') or '?'})"
                         ),
+                        action="logged on over NTLM with admin rights (possible pass-the-hash)",
                         evidence=[event],
                         src_ip=remote_ip(event.get("IpAddress")),
                         src_host=remote_name(event.get("WorkstationName")),
@@ -234,17 +267,18 @@ class RemoteScheduledTask(Rule):
             if session is None or not session.is_remote:
                 continue
             task = str(event.get("TaskName") or "?")
-            match = _TASK_COMMAND.search(str(event.get("TaskContent") or ""))
-            command = f", runs '{match.group(1).strip()}'" if match else ""
-            action = "created" if event.event_id == 4698 else "updated"
+            run = task_command(event)
+            command = f", runs '{run}'" if run else ""
+            verb = "created" if event.event_id == 4698 else "updated"
             yield self.finding(
                 timestamp=event.timestamp,
                 host=event.computer,
                 user=session.user,
                 summary=(
-                    f"Task '{task}' {action} from remote session "
+                    f"Task '{task}' {verb} from remote session "
                     f"({session.source_ip or session.source_host}){command}"
                 ),
+                action=f"{verb} scheduled task '{task}'" + (f" to run '{clip(run, 70)}'" if run else ""),
                 evidence=[event],
                 src_ip=session.source_ip,
                 src_host=session.source_host,
@@ -294,6 +328,7 @@ class AdminShareExecutable(Rule):
                     f"'{target}' accessed on {share} from "
                     f"{event.get('IpAddress') or '?'}"
                 ),
+                action=f"accessed executable '{clip(target, 70)}' on {share_label(share)}",
                 evidence=[event],
                 src_ip=remote_ip(event.get("IpAddress")),
             )

@@ -31,7 +31,7 @@ CATALOG: dict[tuple[str, int], str] = {
     (SECURITY, 4625): "Failed logon",
     (SECURITY, 4634): "Logoff",
     (SECURITY, 4647): "User-initiated logoff",
-    (SECURITY, 4648): "Logon with explicit credentials (runas)",
+    (SECURITY, 4648): "Logon with explicit credentials (runas, net use /user, ...)",
     (SECURITY, 4672): "Special privileges assigned to new logon",
     (SECURITY, 4768): "Kerberos TGT requested",
     (SECURITY, 4769): "Kerberos service ticket requested",

@@ -15,9 +15,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .attack import technique_name
-from .graph import build_graph, legend_html, render_svg
+from .graph import AttackGraph, build_graph, legend_html, render_svg
+from .narrative import build_story
 from .rules.base import SEVERITY_RANK, Finding, HuntContext
-from .style import SEVERITY_COLOR, SEVERITY_ORDER, page_head
+from .style import SEVERITY_COLOR, SEVERITY_ORDER, SEVERITY_TEXT, page_head
 
 # Findings with a FILETIME-null timestamp land here; excluded from the plot.
 _MIN_PLOT_YEAR = 2000
@@ -39,12 +40,15 @@ def render_report(
     (anything with ``index`` and ``reason``); they are listed, never hidden."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
     by_sev = Counter(f.severity for f in findings)
+    graph = build_graph(ctx, findings)
+    story = build_story(ctx, findings, graph)
     parts = [
         _HEAD.replace("__TITLE__", _esc(title)),
         _header(title, generated),
         _stat_row(ctx, findings, stats),
         _severity_bar(by_sev, len(findings)),
-        _graph_section(ctx, findings),
+        story.to_html() if findings or graph.edges else "",
+        _graph_section(graph),
         _attack_section(findings),
         _timeline_section(findings),
         _movement_section(ctx),
@@ -109,8 +113,7 @@ def _severity_bar(by_sev: Counter, total: int) -> str:
 </section>"""
 
 
-def _graph_section(ctx: HuntContext, findings: list[Finding]) -> str:
-    graph = build_graph(ctx, findings)
+def _graph_section(graph: AttackGraph) -> str:
     if not graph.edges:
         return ""
     origins = sum(n.origin for n in graph.connected)
@@ -273,13 +276,13 @@ def _findings_section(findings: list[Finding]) -> str:
         items.append(
             f"""<div class="finding" style="--sev:{color}">
   <div class="f-head">
-    <span class="badge" style="background:{color}">{_esc(f.severity.upper())}</span>
+    <span class="badge" style="background:{color};color:{SEVERITY_TEXT.get(f.severity, '#fff')}">{_esc(f.severity.upper())}</span>
     <span class="rule">{_esc(f.rule_id)}</span>
     <span class="f-title">{_esc(f.title)}</span>
     <span class="f-time mono">{f.timestamp:%Y-%m-%d %H:%M:%S}Z</span>
   </div>
   <div class="f-meta"><b>host</b> {_esc(f.host)} &nbsp; <b>user</b> {_esc(f.user)} &nbsp; {techs}</div>
-  <div class="f-sum">{_esc(f.summary)}</div>
+  <div class="f-sum">{_esc(f.summary)}</div>{_merged_html(f)}
 </div>"""
         )
     return f"""<section class="card">
@@ -288,12 +291,27 @@ def _findings_section(findings: list[Finding]) -> str:
 </section>"""
 
 
+def _merged_html(finding: Finding) -> str:
+    """Findings of other rules this one already tells, kept visible under it."""
+    if not finding.merged:
+        return ""
+    rows = "".join(
+        f'<div class="f-also"><b>also matched</b> <span class="rule">{_esc(m.rule_id)}</span> '
+        f"{_esc(m.title)} ({_esc(m.severity)}) <span class=\"mono\">{m.timestamp:%H:%M:%S}Z</span> "
+        f"<b>user</b> {_esc(m.user)}: {_esc(m.summary)}</div>"
+        for m in finding.merged
+    )
+    return "\n  " + rows
+
+
 def _suppressed_section(suppressed: list[tuple[Finding, Any]]) -> str:
     if not suppressed:
         return ""
     rows = "".join(
         f"<tr><td class='mono'>{f.timestamp:%Y-%m-%d %H:%M:%S}Z</td>"
-        f"<td class='mono'>{_esc(f.rule_id)}</td><td>{_esc(f.severity)}</td>"
+        f"<td class='mono'>{_esc(f.rule_id)}"
+        f"{_esc(' (+' + ', '.join(m.rule_id for m in f.merged) + ')') if f.merged else ''}</td>"
+        f"<td>{_esc(f.severity)}</td>"
         f"<td>{_esc(f.host)}</td><td>{_esc(f.user)}</td>"
         f"<td>allow[{_esc(entry.index)}] {_esc(entry.reason)}</td></tr>"
         for f, entry in suppressed

@@ -46,8 +46,14 @@ from ..catalog import SECURITY, SYSMON
 from ..hosts import clean_ip, is_local_address, short_host
 from ..models import NormalizedEvent
 from ..sessions import display_user
-from .base import Finding, HuntContext, Rule, ServiceInstall, basename
-from .lateral import KNOWN_REMOTE_EXEC_SERVICES, credible_installs, looks_like_remote_exec
+from .base import Finding, HuntContext, Rule, ServiceInstall, basename, clip, share_label
+from .lateral import (
+    KNOWN_REMOTE_EXEC_SERVICES,
+    credible_installs,
+    install_phrase,
+    looks_like_remote_exec,
+    task_command,
+)
 
 TOOL_PIPES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^psexesvc$", re.I), "PsExec"),
@@ -392,6 +398,7 @@ class NamedPipeExecution(Rule):
         evidence.sort(key=lambda e: (e.timestamp, e.record_id))
 
         summary = _summary(cluster, origin)
+        action = _action(cluster, origin, local_client, local)
         if local:
             client = f" by {local_client}" if local_client else ""
             summary = f"local use, client ran on this host{client}: {summary}"
@@ -403,6 +410,7 @@ class NamedPipeExecution(Rule):
             host=host,
             user=Counter(users).most_common(1)[0][0] if users else "-",
             summary=summary,
+            action=action,
             evidence=evidence,
             src_ip=None if local else cluster.client,
             src_host=None if local or not origin else origin[1],
@@ -458,6 +466,92 @@ def _is_enumeration(cluster: _Cluster, all_hits: list[PipeHit], w: PipeWindows) 
     return len(distinct) >= w.enum_distinct_pipes
 
 
+_CONTROL_PHRASE = {"service-control": "the service control manager",
+                   "task-scheduler": "the task scheduler"}
+
+
+def _action(cluster: _Cluster, origin: tuple[str, str, str] | None,
+            local_client: str | None = None, local: bool = False) -> str:
+    """What the pipe activity amounted to, as a narrative phrase: every file
+    put on a share, then what ran and through which channel. Nothing the
+    cluster credits is left out, since a finding merged into this one is told
+    only through it."""
+    pipes = sorted({h.pipe.lower() for h in cluster.hits if h.pipe.lower() in CONTROL_PIPES})
+    channel = (" through " + " and ".join(_CONTROL_PHRASE[c] for c in sorted(cluster.control))
+               + f" ({', '.join(pipes)})") if cluster.control else ""
+    steps = _drop_phrases(cluster.drops)
+    dropped = {basename(d.get("RelativeTargetName")).rsplit(".", 1)[0] for d in cluster.drops}
+    if origin:
+        service = origin[0]
+        renamed = service.lower() != "psexesvc"
+        what = "it" if service.lower() in dropped else "PsExec"
+        how = f" with its service renamed to '{service}'" if renamed else ""
+        if local:
+            steps.append(f"ran PsExec against this same host (client {local_client or '?'}"
+                         + (f", service renamed to '{service}'" if renamed else "") + ")")
+        else:
+            steps.append(f"ran {what} through PsExec{how}" if what == "it"
+                         else f"ran PsExec{how}")
+    else:
+        tools = [label for label in cluster.labels if label != "PsExec-style stdio pipes"]
+        if tools:
+            steps.append(f"ran {' and '.join(tools)} through its named pipes"
+                         + (f" from a client on this same host ({local_client})" if local else ""))
+    if cluster.installs:
+        steps.append(_listed([install_phrase(i) for i in cluster.installs], "services") + channel)
+    if cluster.tasks:
+        steps.append(_listed([_task_phrase(t) for t in cluster.tasks], "tasks") + channel)
+    if not (origin or cluster.labels or cluster.installs or cluster.tasks):
+        if cluster.control:
+            steps.append(f"used {' and '.join(_CONTROL_PHRASE[c] for c in sorted(cluster.control))}"
+                         f" remotely ({', '.join(pipes)})")
+        else:
+            steps.append("connected to a random-named pipe (the named-pipe shell pattern)")
+    text = ", then ".join(steps)
+    return text + ("; no other host involved" if local else "")
+
+
+def _writes(event: NormalizedEvent) -> bool:
+    """Did a 5145 ask for write access (WriteData 0x2 or AppendData 0x4)?
+    A 5145 is an access check; without a write bit the file was only read."""
+    try:
+        return bool(int(str(event.get("AccessMask") or "0"), 16) & 0x6)
+    except ValueError:
+        return False
+
+
+def _drop_phrases(drops: list[NormalizedEvent]) -> list[str]:
+    """'copied 'a.exe' and 'b.dll' to ADMIN$', 'accessed 'c.exe' on C$'."""
+    groups: dict[tuple[str, str], list[str]] = {}
+    for drop in drops:
+        verb = "copied {} to {}" if _writes(drop) else "accessed {} on {}"
+        names = groups.setdefault((verb, share_label(drop.get("ShareName"))), [])
+        name = f"'{clip(drop.get('RelativeTargetName'), 60)}'"
+        if name not in names:
+            names.append(name)
+    return [verb.format(_names(names), share) for (verb, share), names in groups.items()]
+
+
+def _task_phrase(task: NormalizedEvent) -> str:
+    verb = "created" if task.event_id == 4698 else "updated"
+    run = task_command(task)
+    return (f"{verb} scheduled task '{task.get('TaskName') or '?'}'"
+            + (f" to run '{clip(run, 60)}'" if run else ""))
+
+
+def _names(items: list[str]) -> str:
+    if len(items) <= 3:
+        return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+    return f"{', '.join(items[:2])} and {len(items) - 2} more"
+
+
+def _listed(phrases: list[str], noun: str) -> str:
+    distinct = list(dict.fromkeys(phrases))
+    if len(distinct) <= 2:
+        return " and ".join(distinct)
+    return f"{distinct[0]}, {distinct[1]} and {len(distinct) - 2} more {noun}"
+
+
 def _summary(cluster: _Cluster, origin: tuple[str, str, str] | None) -> str:
     if cluster.labels:
         head = " + ".join(cluster.labels)
@@ -475,10 +569,17 @@ def _summary(cluster: _Cluster, origin: tuple[str, str, str] | None) -> str:
         renamed = "" if service.lower() == "psexesvc" else " (renamed)"
         parts.append(f"service '{service}'{renamed} launched from host {source} (pid {pid})")
     if cluster.installs:
-        parts.append(f"then {cluster.installs[0].describe()}")
+        more = f" (+{len(cluster.installs) - 1} more)" if len(cluster.installs) > 1 else ""
+        parts.append(f"then {cluster.installs[0].describe()}{more}")
     if cluster.tasks:
-        parts.append(f"then task '{cluster.tasks[0].get('TaskName') or '?'}' registered")
+        task = cluster.tasks[0]
+        verb = "created" if task.event_id == 4698 else "updated"
+        more = f" (+{len(cluster.tasks) - 1} more)" if len(cluster.tasks) > 1 else ""
+        parts.append(f"then task '{task.get('TaskName') or '?'}' {verb}{more}")
     if cluster.drops:
         drop = cluster.drops[0]
-        parts.append(f"after '{drop.get('RelativeTargetName')}' was written to {drop.get('ShareName')}")
+        verb = "written to" if _writes(drop) else "accessed on"
+        files = {str(d.get("RelativeTargetName") or "").lower() for d in cluster.drops}
+        more = f" (+{len(files) - 1} more file(s))" if len(files) > 1 else ""
+        parts.append(f"after '{drop.get('RelativeTargetName')}' was {verb} {drop.get('ShareName')}{more}")
     return "; ".join(parts)

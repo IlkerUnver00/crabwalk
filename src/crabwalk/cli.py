@@ -14,6 +14,7 @@ from .attack import technique_name
 from .catalog import describe
 from .config import Config, ConfigError, example_config, format_duration, load_config
 from .graph import build_graph, render_page
+from .narrative import build_story
 from .models import NormalizedEvent
 from .navigator import build_layer
 from .parser import ParseStats, iter_events
@@ -115,6 +116,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--graph", type=Path, metavar="FILE",
         help="write the attack-path graph; format by extension: "
              ".html (interactive page), .dot/.gv (Graphviz) or .json",
+    )
+    hunt_cmd.add_argument(
+        "--story", type=Path, metavar="FILE.md",
+        help="write the attack story (what happened, step by step) as Markdown",
     )
     tuning = hunt_cmd.add_argument_group("tuning (override the --config file)")
     tuning.add_argument("--config", type=Path, metavar="FILE.toml",
@@ -242,9 +247,12 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         return 2
     screened = config.screen(run_rules(ctx, rules), events=ctx.events)
     findings = screened.kept
+    graph = build_graph(ctx, findings)
+    story = build_story(ctx, findings, graph)
 
     if args.out:
         payload = {
+            "story": story.to_dict(),
             "findings": [f.to_dict() for f in findings],
             "suppressed": [
                 {**f.to_dict(), "allow_entry": entry.index, "allow_reason": entry.reason}
@@ -260,11 +268,12 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         html = render_report(ctx, findings, stats=stats, suppressed=screened.suppressed)
         args.report.write_text(html, encoding="utf-8")
     if args.graph:
-        graph = build_graph(ctx, findings)
         text = {"html": render_page, "dot": lambda g: g.to_dot(), "json": lambda g: g.to_json()}[
             graph_format
         ](graph)
         args.graph.write_text(text, encoding="utf-8")
+    if args.story:
+        args.story.write_text(story.to_markdown(), encoding="utf-8")
 
     by_severity = Counter(f.severity for f in findings)
     _print_parse_stats(stats)
@@ -293,11 +302,15 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         print(f"[{f.severity.upper()}] {f.timestamp:%Y-%m-%d %H:%M:%S}Z  {f.rule_id}  {f.title}")
         print(f"    host: {f.host}   user: {f.user}   ATT&CK: {', '.join(f.techniques)}")
         print(f"    {f.summary}")
+        for m in f.merged:
+            print(f"    also matched {m.rule_id} {m.title} ({m.severity}) "
+                  f"{m.timestamp:%H:%M:%S}Z, user {m.user}: {m.summary}")
 
     if args.show_suppressed and screened.suppressed:
         print("\nSUPPRESSED BY ALLOWLIST")
         for f, entry in screened.suppressed:
-            print(f"  [{f.severity.upper()}] {f.timestamp:%Y-%m-%d %H:%M:%S}Z  {f.rule_id}  "
+            also = f" (+{', '.join(m.rule_id for m in f.merged)})" if f.merged else ""
+            print(f"  [{f.severity.upper()}] {f.timestamp:%Y-%m-%d %H:%M:%S}Z  {f.rule_id}{also}  "
                   f"host: {f.host}  user: {f.user}  -> {entry.label}")
 
     if findings:
@@ -305,8 +318,11 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         technique_counts = Counter(t for f in findings for t in f.techniques)
         for technique_id, count in sorted(technique_counts.items()):
             print(f"{technique_id:<10} {technique_name(technique_id):<60} {count:>4}")
+    if findings or graph.edges:
+        print("\nATTACK STORY")
+        print(story.to_text(), end="")
     outputs = (("findings", args.out), ("layer", args.layer), ("report", args.report),
-               ("graph", args.graph))
+               ("graph", args.graph), ("story", args.story))
     for label, path in outputs:
         if path:
             print(f"wrote {label} -> {path}")

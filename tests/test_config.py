@@ -367,16 +367,19 @@ def test_a_misspelled_or_misplaced_field_fails_closed(narrowing):
 
 def test_one_entry_can_describe_a_tool_across_rules_and_log_sources():
     # One table per kind of evidence: the 5145s, the Sysmon pipe events and the
-    # install. CW-005's single 5145 needs only the first; a Security-only
-    # export simply never uses the PipeName table.
+    # install. A CW-005 on its own (here on another host; the drop on SRV01 is
+    # merged into its CW-012) needs only the first; a Security-only export
+    # simply never uses the PipeName table.
     drop = ev(5145, ShareName="\\\\*\\ADMIN$", RelativeTargetName="PSEXESVC.exe",
               IpAddress="10.0.0.5", SubjectUserName="admin", SubjectDomainName="CORP")
-    events = [drop, pipe_open("svcctl", 0.1), pipe_open("PSEXESVC", 0.3),
+    lone_drop = ev(5145, computer="SRV02", ShareName="\\\\*\\ADMIN$", RelativeTargetName="PSEXESVC.exe",
+                   IpAddress="10.0.0.5", SubjectUserName="admin", SubjectDomainName="CORP")
+    events = [drop, lone_drop, pipe_open("svcctl", 0.1), pipe_open("PSEXESVC", 0.3),
               pipe_open("PSEXESVC-WKS66-4242-stdin", 0.4),
               ev(7045, channel=SYSTEM, minutes=0.2 / 60, ServiceName="PSEXESVC",
                  ImagePath=r"%SystemRoot%\PSEXESVC.exe")]
     findings = run_rules(HuntContext.build(events))
-    assert sorted(f.rule_id for f in findings) == ["CW-005", "CW-012"]
+    assert sorted((f.rule_id, f.host) for f in findings) == [("CW-005", "SRV02"), ("CW-012", "SRV01")]
     config = parse_config({"allow": [{
         "reason": "IT runs stock PsExec", "rules": ["CW-012", "CW-005"], "sources": ["10.0.0.5"],
         "fields": [{"RelativeTargetName": r"^(svcctl|psexesvc(\.exe)?|psexesvc-WKS66-\d+-std(in|out|err))$"},

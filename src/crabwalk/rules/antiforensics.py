@@ -23,6 +23,7 @@ class EventLogCleared(Rule):
                 host=event.computer,
                 user=user,
                 summary="Security audit log cleared (1102)",
+                action="cleared the Security log",
                 evidence=[event],
             )
         for event in ctx.events_for(SYSTEM, 104):
@@ -33,5 +34,6 @@ class EventLogCleared(Rule):
                 host=event.computer,
                 user=user,
                 summary=f"Event log '{channel}' cleared (104)",
+                action=f"cleared the '{channel}' log",
                 evidence=[event],
             )

@@ -31,6 +31,12 @@ class Finding:
     # graph draw the finding as a src -> host edge instead of a lone node.
     src_ip: str | None = None
     src_host: str | None = None
+    # What was done, as a past-tense phrase without host or time ("installed
+    # service 'x' (c:\x.exe)"), for the attack narrative. Empty: use the title.
+    action: str = ""
+    # Findings of other rules whose evidence this one already cites in full,
+    # with at least their techniques and severity: one story, told once.
+    merged: list[Finding] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,6 +50,9 @@ class Finding:
             "src_ip": self.src_ip,
             "src_host": self.src_host,
             "summary": self.summary,
+            "action": self.action,
+            # each merged finding in full: its own time, account, source and records
+            "merged": [m.to_dict() for m in self.merged],
             "evidence": [
                 {
                     "timestamp": e.timestamp.isoformat(),
@@ -203,3 +212,27 @@ class Rule(ABC):
 def basename(path: Any) -> str:
     """Lower-case file name from a Windows path-ish value."""
     return str(path or "").replace("/", "\\").rsplit("\\", 1)[-1].lower()
+
+
+def share_label(share: Any) -> str:
+    """'\\\\*\\ADMIN$' -> 'ADMIN$': the share as an analyst names it."""
+    return str(share or "?").replace("/", "\\").rsplit("\\", 1)[-1] or "?"
+
+
+def clip(text: Any, limit: int = 80) -> str:
+    """One line for a narrative phrase. A longer value is cut at a word
+    boundary and says how much was left out, so a reader knows to look at
+    the finding (a clipped command line can hide the interesting part)."""
+    flat = " ".join(str(text or "").split())
+    if len(flat) <= limit:
+        return flat
+    head = flat[:limit]
+    cut = head.rfind(" ")
+    if cut >= limit // 2:  # end on a whole word unless that loses more than half
+        head = head[:cut]
+    return f"{head}… (+{len(flat) - len(head)} chars)"
+
+
+def evidence_key(event: NormalizedEvent) -> tuple[str, str, int, datetime]:
+    """Identity of a record across findings (the dedup_events key)."""
+    return (event.computer, event.channel, event.record_id, event.timestamp)

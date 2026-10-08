@@ -51,6 +51,7 @@ class Kerberoasting(Rule):
                     f"RC4 service ticket for SPN account '{service}' requested by "
                     f"{user} from {event.get('IpAddress') or '?'}"
                 ),
+                action=f"requested an RC4 service ticket for '{service}' (Kerberoasting)",
                 evidence=[event],
                 src_ip=remote_ip(event.get("IpAddress")),
             )
@@ -89,5 +90,6 @@ class DCSync(Rule):
                     f"Directory replication (DS-Replication-Get-Changes) requested "
                     f"by non-DC principal {user}"
                 ),
+                action="requested directory replication from a non-DC account (DCSync)",
                 evidence=[event],
             )

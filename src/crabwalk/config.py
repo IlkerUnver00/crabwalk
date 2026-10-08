@@ -356,7 +356,10 @@ class Config:
         suppressed: list[tuple[Finding, AllowEntry]] = []
         below = 0
         for finding in findings:
-            entry = next((e for e in active if e.matches(finding)), None)
+            # an entry has to cover what was merged into a finding too (its
+            # rule is in the entry's scope only if the entry says so)
+            entry = next((e for e in active if e.matches(finding)
+                          and all(e.matches(m) for m in finding.merged)), None)
             if entry is not None:
                 suppressed.append((finding, entry))
             elif self.min_severity and SEVERITY_RANK[finding.severity] < SEVERITY_RANK[self.min_severity]:
@@ -368,7 +371,8 @@ class Config:
         records = events if events is not None else [e for f in findings for e in f.evidence]
         shapes = {frozenset(_field_values(event)) for event in records}
         warnings = (_unseen_table_warnings(active, findings, done, shapes)
-                    + _near_miss_warnings(active, kept, shapes))
+                    + _near_miss_warnings(active, kept, shapes)
+                    + _merged_miss_warnings(active, kept))
         return Screened(kept, suppressed, below, expired, warnings)
 
     def describe(self) -> dict[str, Any]:
@@ -453,6 +457,23 @@ def _near_miss_warnings(
                         "(a typo, fields of different records in one table, or a log source "
                         "the data lacks?)")
         warnings.append(message)
+    return warnings
+
+
+def _merged_miss_warnings(entries: list[AllowEntry], kept: list[Finding]) -> list[str]:
+    """An entry matched a finding but not a finding merged into it (usually:
+    the merged one's rule is not in the entry's `rules`), so it was kept."""
+    warnings = []
+    for finding in kept:
+        for entry in entries:
+            if not finding.merged or not entry.matches(finding):
+                continue
+            missed = sorted({m.rule_id for m in finding.merged if not entry.matches(m)})
+            if missed:
+                warnings.append(
+                    f"{entry.label}: kept {finding.rule_id} on {finding.host} at "
+                    f"{finding.timestamp:%Y-%m-%d %H:%M:%S}Z; it also tells {', '.join(missed)}, which "
+                    "the entry does not cover (add it to the entry's rules if that is expected too)")
     return warnings
 
 

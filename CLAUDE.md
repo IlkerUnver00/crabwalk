@@ -9,7 +9,7 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
 - CLI: `crabwalk parse <paths> [--all | --event-id N | --channel X] [--out f.jsonl]`
        `crabwalk sessions <paths> [--include-machine] [--out f.json]`
        `crabwalk hunt <paths> [--out findings.json] [--report r.html] [--layer nav.json]
-                             [--graph g.html|g.dot|g.json]`
+                             [--graph g.html|g.dot|g.json] [--story story.md]`
 - report.py = self-contained HTML (inline CSS + Python-generated SVG attack graph and
   swimlane timeline, theme-aware, no JS). navigator.py = ATT&CK layer JSON.
   style.py = shared CSS + severity palette (status palette, fixed, never themed).
@@ -19,7 +19,18 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   session movement + findings carrying src_ip/src_host. Layout = longest path on a DAG
   (cycle-closing edges skipped in time order). Exports DOT/JSON/SVG/standalone HTML.
 - Finding.src_ip/src_host: fill them whenever the evidence names the source; that is
-  what turns a finding into a graph edge.
+  what turns a finding into a graph edge. Finding.action: a past-tense phrase without
+  host/time/user ("installed service 'x' (c:\x.exe)") — every rule sets it; the story
+  is built from it. Say only what the record shows ("copied" needs a write AccessMask).
+- rules.merge_overlaps(): a finding whose records another rule's finding already cites
+  (with ⊇ techniques, ≥ severity, same host/account/source, ≤10 min) goes into that
+  finding's `merged` (shown as "also matched", full in JSON). A merge must never drop an
+  actor, source or time. Allowlist entries must match merged children too.
+- narrative.py = the attack story (hunt prints it; --story md; report "What happened";
+  Pages landing). Every line = one edge visit or one rule burst on a host; sources as the
+  step's own records name them; accounts joined by SID except local ones (cloned images
+  share local SIDs); gaps > 7 days get a caution before the steps; to_text uses ASCII
+  arrows. Changing a rule's wording changes quoted output in README/docs/writeups.
 - HuntContext.service_installs merges 7045 + 4697 + Sysmon 13 (Services\*\ImagePath);
   use it instead of reading 7045 directly so rules work on Sysmon-only exports.
 - catalog.CONTENT_FILTERS narrows high-volume IDs (Sysmon 13) at parse time; parser
@@ -67,7 +78,10 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
 - Visual check of HTML output: render with Edge headless
   (`msedge --headless=new --screenshot=out.png --window-size=1300,1212 file:///...`,
   URL-encode the ü in Masaüstü as %C3%BC) and look at the PNG; docs/report-screenshot.png
-  is the README hero.
+  is the README hero (the demo/evtx report, `--force-dark-mode --window-size=1300,1580`)
+  and docs/writeups/img/01-attack-path-graph.png the write-up's graph (1100,520). Regenerate
+  both when rule wording or the graph changes. From bash, launch Edge via PowerShell
+  Start-Process (the bash call returns before the PNG is written).
 - Parser reality (learned the hard way): pyevtx-rs nests XML attributes under
   `#attributes` (Provider Name, TimeCreated SystemTime, Security UserID) — NOT `@name`.
   Record-level `timestamp` is often FILETIME-null (1601); event_timestamp() prefers

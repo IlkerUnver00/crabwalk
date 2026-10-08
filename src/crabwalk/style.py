@@ -10,6 +10,13 @@ SEVERITY_COLOR = {
     "low": "#0ca30c",
 }
 SEVERITY_ORDER = ("critical", "high", "medium", "low")
+# Text on a severity badge: white only where it stays readable (WCAG 4.5:1).
+SEVERITY_TEXT = {
+    "critical": "#fff",
+    "high": "#1b1b1b",
+    "medium": "#1b1b1b",
+    "low": "#1b1b1b",
+}
 
 PAGE_CSS = """
 :root{
@@ -74,6 +81,27 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .chip{display:inline-block;font-family:ui-monospace,monospace;font-size:11px;
   background:var(--stripe);border:1px solid var(--border);border-radius:5px;
   padding:0 6px;margin-left:4px}
+.f-also{font-size:12px;color:var(--ink-2);margin-top:6px}
+.f-also b{color:var(--ink-3);font-weight:600}
+.story h3{font-size:14px;margin:18px 0 2px;font-weight:600}
+.story-head{margin:0 0 4px;font-size:15px}
+.story-lead{margin:0 0 6px;font-size:13px}
+.story-note{font-size:13px;color:var(--ink-2);border-left:3px solid var(--axis);
+  padding:4px 10px;margin:8px 0}
+.story-more{font-size:12px;margin:0 0 8px}
+.beats{list-style:none;padding:0;margin:6px 0 10px}
+.beats li{display:grid;grid-template-columns:150px 74px 1fr;gap:10px;align-items:baseline;
+  padding:5px 0;border-bottom:1px solid var(--grid);font-size:13px}
+.beats li:last-child{border-bottom:none}
+.beats .badge{justify-self:start}
+.beats .rule,.beats .chip,.b-time{white-space:nowrap}
+.b-time{color:var(--ink-3)}
+.b-until{font-size:11px}
+.b-logon{font-size:11px;color:var(--ink-3);letter-spacing:.03em;text-transform:uppercase}
+@media (max-width:640px){
+  .beats li{grid-template-columns:auto 1fr;gap:4px 10px}
+  .beats .b-text{grid-column:1/-1}
+}
 svg.attack-graph{display:block;max-width:none}
 svg.attack-graph text{font-family:var(--font)}
 .attack-graph .box{fill:var(--surface)}

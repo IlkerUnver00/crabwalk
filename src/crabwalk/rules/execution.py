@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from ..catalog import POWERSHELL, SECURITY, SYSMON, WINRM
 from ..models import NormalizedEvent
 from ..sessions import display_user
-from .base import Finding, HuntContext, Rule, basename
+from .base import Finding, HuntContext, Rule, basename, clip
 
 SHELLS = {
     "cmd.exe",
@@ -33,6 +33,11 @@ POWERSHELL_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 )
 
 
+def _and(items: list[str]) -> str:
+    """'a', 'a and b', 'a, b and c'."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def _process_pairs(ctx: HuntContext) -> Iterator[tuple[NormalizedEvent, str, str, str]]:
     """Yield (event, parent_basename, child_basename, user) from Sysmon 1 and 4688."""
     for event in ctx.events_for(SYSMON, 1):
@@ -43,11 +48,18 @@ def _process_pairs(ctx: HuntContext) -> Iterator[tuple[NormalizedEvent, str, str
             str(event.get("User") or "-"),
         )
     for event in ctx.events_for(SECURITY, 4688):
+        # A v2 4688 names the account the new process runs as in Target*; the
+        # Subject is whoever created it (often the machine account for WMI).
+        target = str(event.get("TargetUserName") or "").strip()
+        if target and target != "-":
+            user = display_user(event.get("TargetDomainName"), target)
+        else:
+            user = display_user(event.get("SubjectDomainName"), event.get("SubjectUserName"))
         yield (
             event,
             basename(event.get("ParentProcessName")),
             basename(event.get("NewProcessName")),
-            display_user(event.get("SubjectDomainName"), event.get("SubjectUserName")),
+            user,
         )
 
 
@@ -56,6 +68,7 @@ class _SpawnedByRule(Rule):
 
     parent: str  # e.g. "wmiprvse.exe"
     via: str  # label for summaries
+    through: str  # narrative: "ran 'x' through <through>"
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         for event, parent, child, user in _process_pairs(ctx):
@@ -68,6 +81,7 @@ class _SpawnedByRule(Rule):
                 host=event.computer,
                 user=user,
                 summary=f"{self.via} spawned '{command[:160]}'",
+                action=f"ran '{clip(command, 90)}' through {self.through}",
                 evidence=[event],
             )
 
@@ -79,6 +93,7 @@ class WmiExec(_SpawnedByRule):
     techniques = ("T1047",)
     parent = "wmiprvse.exe"
     via = "WmiPrvSE.exe (WMI)"
+    through = "WMI"
 
 
 class WinRmExec(_SpawnedByRule):
@@ -88,6 +103,7 @@ class WinRmExec(_SpawnedByRule):
     techniques = ("T1021.006",)
     parent = "wsmprovhost.exe"
     via = "wsmprovhost.exe (WinRM)"
+    through = "PowerShell remoting (WinRM)"
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         yield from super().evaluate(ctx)
@@ -97,6 +113,7 @@ class WinRmExec(_SpawnedByRule):
                 host=event.computer,
                 user=event.user_sid or "-",
                 summary="WinRM shell created on host (event 91)",
+                action="opened a WinRM shell",
                 evidence=[event],
             )
 
@@ -128,5 +145,6 @@ class SuspiciousPowerShell(Rule):
                 host=event.computer,
                 user=event.user_sid or "-",
                 summary=f"Script block matches [{', '.join(labels)}]: {snippet}",
+                action=f"ran a PowerShell script block with {_and(labels)}",
                 evidence=[event],
             )

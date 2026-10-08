@@ -64,7 +64,7 @@ def test_outbound_and_inbound_half_edges_become_one_edge():
     ]
     (edge,) = graph_of(events).edges
     assert (edge.src, edge.dst) == ("ws01", "srv01")
-    assert edge.kinds() == {"runas": 1, "logon": 1}
+    assert edge.kinds() == {"explicit creds": 1, "logon": 1}
 
 
 def test_finding_source_ip_resolves_through_learned_name():

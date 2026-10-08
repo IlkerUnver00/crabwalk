@@ -22,7 +22,7 @@ from datetime import datetime
 from typing import Any
 
 from .hosts import HostResolver, classify_ip
-from .rules.base import SEVERITY_RANK, Finding, HuntContext
+from .rules.base import SEVERITY_RANK, Finding, HuntContext, evidence_key
 from .style import SEVERITY_COLOR, SEVERITY_ORDER, page_head
 
 #: Short names for session-layer movement kinds; rule ids pass through as-is.
@@ -33,7 +33,7 @@ KIND_LABELS = {
     "rdp": "RDP",
     "rdp-session": "RDP",
     "rdp-reconnect": "RDP",
-    "explicit-credentials": "runas",
+    "explicit-credentials": "explicit creds",  # 4648: not only runas
     "interactive": "interactive",
 }
 EDGE_LABEL_MAX = 24
@@ -49,6 +49,12 @@ class Movement:
     privileged: bool = False
     severity: str | None = None  # set when the movement comes from a finding
     title: str | None = None
+    finding: Finding | None = None  # the finding itself, for the narrative
+    # What this observation itself says about its source (the node may know
+    # more, learned elsewhere), and the records behind it.
+    src_ip: str | None = None
+    src_host: str | None = None
+    records: frozenset = frozenset()
 
     @property
     def label(self) -> str:
@@ -110,6 +116,7 @@ class GraphNode:
     depth: int = 0
     component: int = -1  # -1: no movement observed
     origin: bool = False  # sends movement but never receives any
+    hits: list[Finding] = field(default_factory=list)  # the findings counted in `findings`
 
     @property
     def address_class(self) -> str | None:
@@ -244,12 +251,16 @@ def build_graph(
 
     for edge in movement_edges:
         add(hosts.key(edge.src_ip, edge.src_host), hosts.key(name=edge.dst),
-            Movement(edge.timestamp, edge.kind, edge.user, edge.privileged))
+            Movement(edge.timestamp, edge.kind, edge.user, edge.privileged,
+                     src_ip=edge.src_ip, src_host=edge.src_host,
+                     records=frozenset({evidence_key(edge.event)}) if edge.event else frozenset()))
     for finding in findings:
         if finding.src_ip or finding.src_host:
             add(hosts.key(finding.src_ip, finding.src_host), hosts.key(name=finding.host),
                 Movement(finding.timestamp, finding.rule_id, finding.user,
-                         severity=finding.severity, title=finding.title))
+                         severity=finding.severity, title=finding.title, finding=finding,
+                         src_ip=finding.src_ip, src_host=finding.src_host,
+                         records=frozenset(evidence_key(e) for e in finding.evidence)))
 
     nodes: dict[str, GraphNode] = {}
 
@@ -271,6 +282,7 @@ def build_graph(
             continue
         n = node(key)
         n.findings[finding.rule_id] += 1
+        n.hits.append(finding)
         seen(n, finding.timestamp)
         if n.severity is None or SEVERITY_RANK[finding.severity] > SEVERITY_RANK[n.severity]:
             n.severity = finding.severity
