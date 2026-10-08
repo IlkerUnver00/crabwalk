@@ -59,6 +59,75 @@ def test_psexec_pattern_detected_and_known_tool_is_critical():
     assert finding.user == "CORP\\admin"
 
 
+def sysmon_image_path(service, image, *, minutes=0, computer="SRV01"):
+    return ev(13, channel=SYSMON, minutes=minutes, computer=computer,
+              Image=r"C:\Windows\system32\services.exe",
+              TargetObject=rf"HKLM\System\CurrentControlSet\Services\{service}\ImagePath",
+              Details=image)
+
+
+def test_one_install_seen_by_7045_and_sysmon_13_is_one_finding():
+    events = [
+        remote_logon(),
+        sysmon_image_path("PSEXESVC", r"%%SystemRoot%%\PSEXESVC.exe", minutes=1.999),
+        ev(7045, channel=SYSTEM, minutes=2, ServiceName="PSEXESVC",
+           ImagePath=r"%SystemRoot%\PSEXESVC.exe"),
+    ]
+    ctx = HuntContext.build(events)
+    (install,) = ctx.service_installs
+    assert install.source == "7045"
+    assert len(by_rule(run_rules(ctx), "CW-001")) == 1
+
+
+def test_sysmon_13_rewrite_of_an_existing_service_is_not_an_install():
+    # Defender platform updates rewrite WinDefend's ImagePath all the time.
+    image = r"C:\ProgramData\Microsoft\Windows Defender\Platform\4.18.24090.11-0\MsMpEng.exe"
+    findings = findings_for(remote_logon(), sysmon_image_path("WinDefend", image, minutes=3))
+    assert by_rule(findings, "CW-001") == []
+
+
+def test_sysmon_13_counts_when_it_looks_like_remote_exec():
+    command = r"%COMSPEC% /b /c start /b /min powershell.exe -nop -w hidden -c ..."
+    (finding,) = by_rule(findings_for(remote_logon(), sysmon_image_path("hello", command, minutes=1)),
+                         "CW-001")
+    assert "ImagePath of service 'hello' set to" in finding.summary
+    # An unrelated 7045 elsewhere on the host does not prove this install's
+    # 7045 was logged (the System log may have been cleared): it still counts.
+    with_other_scm = findings_for(
+        remote_logon(), sysmon_image_path("hello", command, minutes=1),
+        ev(7045, channel=SYSTEM, minutes=9, ServiceName="Other", ImagePath=r"C:\o.exe"),
+    )
+    assert any("hello" in f.summary for f in by_rule(with_other_scm, "CW-001"))
+
+
+def test_two_real_installs_of_one_service_are_not_merged():
+    events = [
+        remote_logon(),
+        ev(7045, channel=SYSTEM, minutes=1, ServiceName="PSEXESVC", ImagePath=r"C:\p.exe"),
+        remote_logon(logon_id="0x99", user="eve", IpAddress="10.0.0.9", WorkstationName="WS09",
+                     minutes=1.03),
+        ev(7045, channel=SYSTEM, minutes=1.1, ServiceName="PSEXESVC", ImagePath=r"C:\p.exe"),
+    ]
+    ctx = HuntContext.build(events)
+    assert [i.source for i in ctx.service_installs] == ["7045", "7045"]
+    assert len(by_rule(run_rules(ctx), "CW-001")) == 2
+
+
+def test_copies_of_one_install_merge_even_across_an_earlier_write():
+    # Sysmon 13 at :50, 4697 at :59.98, 7045 at :60.02 — one install, one finding.
+    events = [
+        remote_logon(),
+        sysmon_image_path("PSEXESVC", r"%SystemRoot%\PSEXESVC.exe", minutes=50 / 60),
+        ev(4697, channel=SECURITY, minutes=59.98 / 60, ServiceName="PSEXESVC",
+           ServiceFileName=r"%SystemRoot%\PSEXESVC.exe"),
+        ev(7045, channel=SYSTEM, minutes=60.02 / 60, ServiceName="PSEXESVC",
+           ImagePath=r"%SystemRoot%\PSEXESVC.exe"),
+    ]
+    ctx = HuntContext.build(events)
+    assert [i.source for i in ctx.service_installs] == ["7045"]
+    assert len(by_rule(run_rules(ctx), "CW-001")) == 1
+
+
 def test_service_install_without_remote_logon_is_quiet():
     findings = findings_for(
         ev(7045, channel=SYSTEM, ServiceName="GoodDriver", ImagePath=r"C:\ok.sys")

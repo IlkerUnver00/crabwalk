@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from ..catalog import SECURITY
+from ..hosts import remote_ip
 from ..sessions import display_user
 from .base import Finding, HuntContext, Rule
 
@@ -56,6 +57,7 @@ class Kerberoasting(Rule):
                     f"{user} from {event.get('IpAddress') or '?'}"
                 ),
                 evidence=[event],
+                src_ip=remote_ip(event.get("IpAddress")),
             )
 
 

@@ -21,10 +21,8 @@ from datetime import datetime
 from typing import Any
 
 from .catalog import SECURITY, TS_LSM
+from .hosts import is_local_address
 from .models import NormalizedEvent
-
-#: Placeholder / loopback values that mean "not a remote source".
-LOCAL_SOURCES = {"", "-", "127.0.0.1", "::1", "localhost", "local"}
 
 LOGON_TYPE_LABELS = {
     2: "interactive",
@@ -70,7 +68,8 @@ def _to_int(value: Any) -> int | None:
 
 
 def _is_local(address: str | None) -> bool:
-    return address is None or address.strip().lower() in LOCAL_SOURCES
+    """Placeholders and loopback (incl. ::ffff:127.x) are not remote sources."""
+    return address is None or is_local_address(address)
 
 
 @dataclass(slots=True)

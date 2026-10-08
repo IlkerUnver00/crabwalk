@@ -7,6 +7,7 @@ TECHNIQUES: dict[str, str] = {
     "T1047": "Windows Management Instrumentation",
     "T1053.005": "Scheduled Task/Job: Scheduled Task",
     "T1543.003": "Create or Modify System Process: Windows Service",
+    "T1569.002": "System Services: Service Execution",
     "T1550.002": "Use Alternate Authentication Material: Pass the Hash",
     "T1059.001": "Command and Scripting Interpreter: PowerShell",
     "T1070.001": "Indicator Removal: Clear Windows Event Logs",

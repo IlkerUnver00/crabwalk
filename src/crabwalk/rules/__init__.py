@@ -16,6 +16,7 @@ from .lateral import (
     RdpChain,
     RemoteScheduledTask,
 )
+from .pipes import NamedPipeExecution
 
 ALL_RULES: tuple[type[Rule], ...] = (
     PsExecPattern,
@@ -29,6 +30,7 @@ ALL_RULES: tuple[type[Rule], ...] = (
     EventLogCleared,
     Kerberoasting,
     DCSync,
+    NamedPipeExecution,
 )
 
 

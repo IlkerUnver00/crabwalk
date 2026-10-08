@@ -6,18 +6,44 @@ import re
 from collections.abc import Iterator
 from datetime import timedelta
 
-from ..catalog import SECURITY, SYSTEM
+from ..catalog import SECURITY
+from ..hosts import HostResolver, remote_ip, remote_name, short_host
 from ..sessions import MovementEdge
-from .base import Finding, HuntContext, Rule
+from .base import Finding, HuntContext, Rule, ServiceInstall
 
 #: Service names dropped by common remote-execution tools.
 KNOWN_REMOTE_EXEC_SERVICES = re.compile(r"psexe|paexec|remcom|csexec|winexe", re.IGNORECASE)
 
+# A service image that is a command line rather than a binary: the
+# Metasploit/impacket-smbexec/Cobalt "jump psexec_psh" shape.
+SUSPICIOUS_SERVICE_IMAGE = re.compile(
+    r"%comspec%|cmd(?:\.exe)?\s+/[ckq]|powershell|-enc(?:odedcommand)?\s|-nop\b"
+    r"|\\\\127\.0\.0\.1\\|\\admin\$\\|\\windows\\temp\\|\\users\\public\\",
+    re.IGNORECASE,
+)
+
+
+def looks_like_remote_exec(install: ServiceInstall) -> bool:
+    return bool(
+        SUSPICIOUS_SERVICE_IMAGE.search(install.image)
+        or KNOWN_REMOTE_EXEC_SERVICES.search(f"{install.name} {install.image}")
+    )
+
+
+def credible_installs(ctx: HuntContext) -> list[ServiceInstall]:
+    """Installs a correlation rule may lean on.
+
+    SCM records (7045/4697) always count. A Sysmon 13 ImagePath write left
+    without an SCM copy is just as often an existing service being
+    reconfigured (updates rewrite ImagePath constantly), so it only counts when
+    the image itself looks like remote execution. That keeps the
+    Metasploit-psexec shape on Sysmon-only hosts — or where the System log was
+    cleared — while a WinDefend platform update stays silent. A renamed tool
+    with a plain binary, seen only through Sysmon 13, is the accepted miss.
+    """
+    return [i for i in ctx.service_installs if i.source != "sysmon13" or looks_like_remote_exec(i)]
+
 _TASK_COMMAND = re.compile(r"<Command>([^<]+)</Command>", re.IGNORECASE)
-
-
-def _shortname(host: str | None) -> str:
-    return (host or "").split(".", 1)[0].lower()
 
 
 def _inbound_edges_to(ctx: HuntContext, computer: str) -> list[MovementEdge]:
@@ -41,8 +67,7 @@ class PsExecPattern(Rule):
     window = timedelta(minutes=10)
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
-        installs = ctx.events_for(SYSTEM, 7045) + ctx.events_for(SECURITY, 4697)
-        for install in installs:
+        for install in credible_installs(ctx):
             edges = [
                 e
                 for e in _inbound_edges_to(ctx, install.computer)
@@ -51,10 +76,8 @@ class PsExecPattern(Rule):
             if not edges:
                 continue
             edge = max(edges, key=lambda e: e.timestamp)  # closest preceding logon
-            name = str(install.get("ServiceName") or "?")
-            image = install.get("ImagePath") or install.get("ServiceFileName") or "?"
             delta = int((install.timestamp - edge.timestamp).total_seconds())
-            known_tool = bool(KNOWN_REMOTE_EXEC_SERVICES.search(f"{name} {image}"))
+            known_tool = bool(KNOWN_REMOTE_EXEC_SERVICES.search(f"{install.name} {install.image}"))
             yield self.finding(
                 severity="critical" if known_tool else "high",
                 timestamp=install.timestamp,
@@ -62,10 +85,12 @@ class PsExecPattern(Rule):
                 user=edge.user,
                 summary=(
                     f"Remote {edge.kind} logon from {edge.src} followed {delta}s later "
-                    f"by install of service '{name}' ({image})"
+                    f"by {install.describe()}"
                     + (" — known remote-exec tool" if known_tool else "")
                 ),
-                evidence=[install],
+                evidence=[install.event],
+                src_ip=edge.src_ip,
+                src_host=edge.src_host,
             )
 
 
@@ -81,20 +106,21 @@ class RdpChain(Rule):
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         rdp = [e for e in ctx.tracking.edges if e.logon_type == 10]
         # Learn ip -> hostname from edges that carry both.
-        ip_names = {
-            e.src_ip: _shortname(e.src_host) for e in rdp if e.src_ip and e.src_host
-        }
+        hosts = HostResolver()
+        for edge in rdp:
+            hosts.learn(edge.src_ip, edge.src_host)
         seen: set[tuple[str, str, str, str]] = set()
         for first in rdp:
-            middle = _shortname(first.dst)
+            middle = short_host(first.dst) or ""
             for second in rdp:
                 delta = second.timestamp - first.timestamp
                 if not timedelta(0) < delta <= self.window:
                     continue
-                second_src = _shortname(second.src_host) or ip_names.get(second.src_ip or "", "")
-                if second_src != middle or _shortname(second.dst) == middle:
+                second_src = hosts.key(second.src_ip, second.src_host) or ""
+                target = short_host(second.dst) or ""
+                if not middle or second_src != middle or target == middle:
                     continue
-                key = (first.src, middle, _shortname(second.dst), second.user)
+                key = (first.src, middle, target, second.user)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -107,6 +133,8 @@ class RdpChain(Rule):
                         f"{first.timestamp:%H:%M:%S}) -> {second.dst} ({second.user}, "
                         f"{second.timestamp:%H:%M:%S})"
                     ),
+                    src_ip=second.src_ip,
+                    src_host=second.src_host or first.dst,
                 )
 
 
@@ -153,6 +181,8 @@ class PassTheHash(Rule):
                             f"(workstation: {event.get('WorkstationName') or '?'})"
                         ),
                         evidence=[event],
+                        src_ip=remote_ip(event.get("IpAddress")),
+                        src_host=remote_name(event.get("WorkstationName")),
                     )
 
 
@@ -182,6 +212,8 @@ class RemoteScheduledTask(Rule):
                     f"({session.source_ip or session.source_host}){command}"
                 ),
                 evidence=[event],
+                src_ip=session.source_ip,
+                src_host=session.source_host,
             )
 
 
@@ -217,4 +249,5 @@ class AdminShareExecutable(Rule):
                     f"{event.get('IpAddress') or '?'}"
                 ),
                 evidence=[event],
+                src_ip=remote_ip(event.get("IpAddress")),
             )

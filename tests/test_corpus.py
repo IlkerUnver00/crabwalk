@@ -45,6 +45,22 @@ GROUND_TRUTH: list[tuple[str, str, str]] = [
     ("Defense Evasion/DE_1102_security_log_cleared.evtx", "T1070.001", "CW-009"),
     ("Defense Evasion/DE_104_system_log_cleared.evtx", "T1070.001", "CW-009"),
     ("Credential Access/CA_DCSync_4662.evtx", "T1003.006", "CW-011"),
+    # CW-012 across both telemetry sources: Sysmon 17/18 and Security 5145 IPC$
+    ("Defense Evasion/DE_renamed_psexec_service_sysmon_17_18.evtx", "T1569.002", "CW-012"),
+    ("Lateral Movement/LM_renamed_psexecsvc_5145.evtx", "T1569.002", "CW-012"),
+    ("Lateral Movement/LM_sysmon_psexec_smb_meterpreter.evtx", "T1543.003", "CW-012"),
+    ("Lateral Movement/lm_sysmon_18_remshell_over_namedpipe.evtx", "T1021.002", "CW-012"),
+    ("Lateral Movement/LM_ScheduledTask_ATSVC_target_host.evtx", "T1053.005", "CW-012"),
+    ("Lateral Movement/LM_Remote_Service01_5145_svcctl.evtx", "T1021.002", "CW-012"),
+]
+
+# (relative path, rule that must stay quiet): attacker activity of a different
+# kind that a sloppy rule would mislabel. This is the precision half of the net.
+NEGATIVE_TRUTH: list[tuple[str, str]] = [
+    ("Discovery/Discovery_Remote_System_NamedPipes_Sysmon_18.evtx", "CW-012"),  # pipe sweep
+    ("Discovery/discovery_bloodhound.evtx", "CW-012"),  # samr/lsarpc/srvsvc over IPC$
+    ("Discovery/discovery_psloggedon.evtx", "CW-012"),
+    ("Credential Access/remote_sam_registry_access_via_backup_operator_priv.evtx", "CW-012"),
 ]
 
 pytestmark = pytest.mark.skipif(
@@ -63,6 +79,49 @@ def test_known_sample_detected(relpath: str, technique: str, rule_id: str):
     rules = {f.rule_id for f in findings}
     assert technique in techniques, f"{relpath}: expected {technique}, got {sorted(techniques)}"
     assert rule_id in rules, f"{relpath}: expected rule {rule_id}, got {sorted(rules)}"
+
+
+@pytest.mark.parametrize("relpath,rule_id", NEGATIVE_TRUTH, ids=lambda v: v)
+def test_known_sample_does_not_trigger(relpath: str, rule_id: str):
+    assert CORPUS is not None
+    sample = CORPUS / relpath
+    if not sample.is_file():
+        pytest.skip(f"missing sample: {relpath}")
+    _, findings = hunt(iter_events([sample]))
+    fired = [f.summary for f in findings if f.rule_id == rule_id]
+    assert not fired, f"{relpath}: {rule_id} should stay quiet, fired: {fired}"
+
+
+def test_psexec_pipe_names_reveal_the_source_host():
+    """The target's own 5145 log names the machine PsExec ran on."""
+    assert CORPUS is not None
+    sample = CORPUS / "Lateral Movement/LM_renamed_psexecsvc_5145.evtx"
+    if not sample.is_file():
+        pytest.skip("missing sample")
+    _, findings = hunt(iter_events([sample]))
+    (finding,) = [f for f in findings if f.rule_id == "CW-012"]
+    assert (finding.src_ip, finding.src_host) == ("10.0.2.16", "NLLT108334")
+    assert finding.severity == "critical"
+    assert "T1021.002" in finding.techniques
+
+
+@pytest.mark.parametrize(
+    "relpath",
+    [
+        "Defense Evasion/DE_renamed_psexec_service_sysmon_17_18.evtx",  # PsExec.exe on the box
+        "Privilege Escalation/sysmon_privesc_psexec_dwell.evtx",  # local PSEXESVC pipe squat
+    ],
+)
+def test_local_psexec_is_not_called_lateral_movement(relpath: str):
+    assert CORPUS is not None
+    sample = CORPUS / relpath
+    if not sample.is_file():
+        pytest.skip(f"missing sample: {relpath}")
+    _, findings = hunt(iter_events([sample]))
+    (finding,) = [f for f in findings if f.rule_id == "CW-012"]
+    assert finding.title.startswith("Local execution")
+    assert "T1021.002" not in finding.techniques
+    assert finding.src_ip is None and finding.src_host is None
 
 
 def _sample_bytes(relpath: str) -> bytes:
