@@ -25,16 +25,18 @@ times, and 4648 only adds an outbound edge to the session graph.
 ## How the rules are validated
 
 - **Unit tests** (`tests/test_rules.py`, `tests/test_pipes.py`, `tests/test_config.py`) run
-  each rule on synthetic events. `pytest tests`: 360 passed.
+  each rule on synthetic events. `pytest tests`: 381 passed.
 - **Ground-truth corpus** (`tests/test_corpus.py`) runs over
   [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES) (GPL-3.0, not
   vendored, under `samples/EVTX-ATTACK-SAMPLES`). `GROUND_TRUTH` has 16 (file, technique,
   rule) entries whose filenames name the technique or the behaviour the rule keys on (CW-006
   is the exception; see its section). `NEGATIVE_TRUTH` has 4 files of *other* attacker
-  activity on which a rule must stay silent. Each entry is hunted **one file at a time**.
+  activity on which a rule must stay silent. Each entry is hunted **one file at a time**,
+  and a finding merged under another rule's still counts as that rule firing, both ways.
   `pytest tests/test_corpus.py`: 26 passed.
 - **Whole-corpus run.** `crabwalk hunt samples/EVTX-ATTACK-SAMPLES` covers 278 files and
-  37,364 records (0 unparsable) and yields 74 findings (4 critical, 53 high, 17 medium).
+  37,364 records (0 unparsable) and yields 72 findings (4 critical, 51 high, 17 medium),
+  after two CW-005 matches are merged into the CW-012 findings that cite them.
   CW-001, CW-002 and CW-010 produce **zero** of them.
 
 **Policy on cross-file correlation.** The whole-corpus run hunts all files together, so
@@ -68,6 +70,19 @@ Several rules use the same derived state, built in `sessions.py` and `rules/base
 
 **Severity levels** are `critical`, `high` and `medium`. No rule emits `low`. Findings that
 are identical in (rule, time, host, user, summary) are collapsed.
+
+**One event, one finding.** A finding is merged into another rule's finding that already
+tells it: one that cites every record it cites, claims at least its techniques at no lower
+severity, adds something (more records, techniques or severity), and names the same host,
+the same account and source (or none), within 10 minutes. The merged finding is listed under
+the other ("also matched", in full in the JSON) and still counts as fired for the corpus
+tests. In practice CW-012 absorbs the CW-005 drop it credits, and could absorb a CW-001 or
+CW-004 about the same install or task by the same actor; findings that disagree about who
+did it, or from where, stay separate (`merge_overlaps()` in `rules/__init__.py`).
+
+**Narrative.** Every rule also sets a short past-tense `action` phrase on its findings
+("installed service 'x' (c:\x.exe)"). The attack story (`narrative.py`, `hunt --story`)
+is built from those phrases and the attack graph; the README describes it.
 
 **Allowlisting.** An `[[allow]]` entry suppresses a finding only when all of its criteria
 match. With `fields`, **every** evidence event of the finding must match one of the entry's
@@ -268,7 +283,7 @@ Config test: `test_privileged_ntlm_switch_keeps_the_seclogo_signature`. On the f
 **Logic.** The rule matches the task event's `SubjectLogonId` to a logon session on the same
 host. It reports the task if that session is remote, meaning its 4624 had a real source
 address. There is no time window: the link is by LogonId. The summary includes the task's
-`<Command>` from `TaskContent`.
+`<Command>`, from `TaskContent` (4698) or `TaskContentNew` (4702).
 
 **Severity:** high, always. **Tunables:** none.
 
@@ -341,17 +356,24 @@ whose name ends in `C$` (for example `PUBLIC$`) is included by accident. CW-012'
 uses the same test. Payloads with other extensions
 (`.vbs`, `.hta`, `.msi`, `.sys`) are missed unless added to `extensions`.
 
+**Merging.** When CW-012 credits the same `ADMIN$` record to a remote-execution cluster
+of the same account and client, this finding is listed under the CW-012 one instead of
+standing alone (see "One event, one finding").
+
 **Validation.** `GROUND_TRUTH`: `Lateral Movement/LM_renamed_psexecsvc_5145.evtx` (T1021.002)
-and `Lateral Movement/LM_REMCOM_5145_TargetHost.evtx` (T1570). Unit test:
-`test_admin_share_executable_deduplicates`. Config test:
-`test_extension_tunable_is_normalized`. On the full corpus: 8 findings, including 5 in
-`Lateral Movement/LM_5145_Remote_FileCopy.evtx`.
+and `Lateral Movement/LM_REMCOM_5145_TargetHost.evtx` (T1570); in the first the CW-005 is
+merged into the CW-012, which the harness counts as fired. Unit test:
+`test_admin_share_executable_deduplicates`; `tests/test_narrative.py` covers the merge
+(`test_the_drop_inside_a_psexec_run_is_told_once`, `test_a_drop_no_execution_follows_stays_a_finding`).
+Config test: `test_extension_tunable_is_normalized`. On the full corpus: 8 matches; the two
+drops CW-012 credits (`blabla.exe` on IEWIN7, `RemComSvc.exe` on PC01) are merged into those
+findings, leaving 6 findings, 5 of them in `Lateral Movement/LM_5145_Remote_FileCopy.evtx`.
 
 ## CW-006: Process spawned via WMI
 
 **ATT&CK:** [T1047](https://attack.mitre.org/techniques/T1047/) Windows Management Instrumentation
 
-**Data sources:** Sysmon 1 (`ParentImage`, `Image`, `CommandLine`, `User`) and Security 4688 (`ParentProcessName`, `NewProcessName`, `CommandLine`, `SubjectUserName`/`SubjectDomainName`).
+**Data sources:** Sysmon 1 (`ParentImage`, `Image`, `CommandLine`, `User`) and Security 4688 (`ParentProcessName`, `NewProcessName`, `CommandLine`; the user is `TargetUserName`/`TargetDomainName`, the account the process runs as, when the event has them, else `SubjectUserName`/`SubjectDomainName`).
 
 **Logic.** Every process whose parent's file name is `wmiprvse.exe`. The summary shows
 `CommandLine`, or the child's file name when there is no command line.
@@ -616,6 +638,11 @@ The rule works on Sysmon-only exports, Security-only exports, or both.
    no source.
 6. **Source host.** The source host is taken from the stdio pipe name. Renamed services that
    contain dashes are resolved against a main pipe seen on the host.
+7. **Telling it.** The summary and the story phrase name every credited drop, install and
+   task (tasks as created for 4698, updated for 4702, with their command), so findings merged
+   into this one lose nothing. A drop is told as "copied" only when its 5145 asks for write
+   access (`AccessMask` with WriteData `0x2` or AppendData `0x4`), otherwise as "accessed";
+   detection itself credits any access to an executable name.
 
 **Severity.** The strongest pipe kind sets the base: tool -> high, control -> medium,
 random -> medium. Control plus corroboration -> high. The finding becomes **critical** for a

@@ -43,16 +43,19 @@ share access. Then the hunt:
 files      : 1
 records    : 22  (kept: 22, unparsable: 0)
 sessions   : 0 | edges: 0
-findings   : 2  (critical 1, high 1)
+findings   : 1  (critical 1)
 
 [CRITICAL] 2019-01-19 13:00:10Z  CW-012  Remote execution over named pipes
     host: IEWIN7   user: IEWIN7\IEUser   ATT&CK: T1021.002, T1569.002, T1570
     PsExec-style stdio pipes: \blabla-NLLT108334-37048-stderr, \blabla-NLLT108334-37048-stdin, \blabla-NLLT108334-37048-stdout, \svcctl; from 10.0.2.16; service 'blabla' (renamed) launched from host NLLT108334 (pid 37048); after 'blabla.exe' was written to \\*\ADMIN$
-
-[HIGH] 2019-01-19 13:00:10Z  CW-005  Executable on administrative share
-    host: IEWIN7   user: IEWIN7\IEUser   ATT&CK: T1021.002, T1570
-    'blabla.exe' accessed on \\*\ADMIN$ from 10.0.2.16
+    also matched CW-005 Executable on administrative share (high) 13:00:10Z, user IEWIN7\IEUser: 'blabla.exe' accessed on \\*\ADMIN$ from 10.0.2.16
 [...]
+ATTACK STORY
+1 attack path across 2 hosts, 2019-01-19. 1 finding: 1 critical.
+
+Path 1: NLLT108334 -> IEWIN7
+  2 hosts · 2019-01-19 · started from NLLT108334 · worst finding: critical
+  2019-01-19 13:00:10Z  NLLT108334 (10.0.2.16) -> IEWIN7 as IEWIN7\IEUser: copied 'blabla.exe' to ADMIN$, then ran it through PsExec with its service renamed to 'blabla'  [critical CW-012]
 wrote findings -> findings.json
 wrote report -> report.html
 wrote graph -> attack-paths.html
@@ -60,9 +63,9 @@ wrote graph -> attack-paths.html
 
 The JSON for the CW-012 finding carries `"src_ip": "10.0.2.16"` and
 `"src_host": "NLLT108334"`, and cites records 16, 17, 18, 20, 21 and 22 as evidence.
-The graph puts both findings on one edge:
+The graph draws it as one edge from the recovered source:
 
-![Attack-path graph: NLLT108334 (10.0.2.16, origin) to IEWIN7, one critical edge carrying CW-005 and CW-012](img/01-attack-path-graph.png)
+![Attack-path graph: NLLT108334 (10.0.2.16, origin) to IEWIN7, one critical CW-012 edge](img/01-attack-path-graph.png)
 
 ## 3. Reading the records
 
@@ -132,8 +135,13 @@ section 9 sample the number in the pipe names (8116) equals the `ProcessId` of t
 `PsExec.exe` client that connects to them (Sysmon 18, records 6 to 8). Since the
 service is not `psexesvc`, the summary adds "(renamed)". The finding gets both `src_ip` (from the 5145 records)
 and `src_host` (from the pipe name). That pairing is what lets the graph merge
-`10.0.2.16` and `NLLT108334` into one node, so CW-005, which only knows the address,
-lands on the same edge.
+`10.0.2.16` and `NLLT108334` into one node.
+
+CW-005 matches the same `blabla.exe` records on its own. CW-012 already cites
+them, maps them to T1570, and names the same host, account and address, so
+crabwalk lists CW-005 under this finding ("also matched") instead of reporting
+one event twice. Had the two rules disagreed about who or where, they would
+have stayed two findings.
 
 ## 5. Why renaming the service does not hide PsExec
 
@@ -176,10 +184,16 @@ events. They do not parse a host name out of a field. I did not run Chainsaw or
 Hayabusa for this write-up, so I make no claim about their exact output.
 
 crabwalk's CW-012 produces one finding with the records attached, the source address
-*and* name, and a severity that reflects the corroboration. To be precise about
-crabwalk itself: it also emits CW-005 for the same `.exe` on `ADMIN$`, because CW-005
-is a standalone rule and no cross-rule deduplication exists today. The graph shows
-the two as one edge, but the console lists two findings.
+*and* name, and a severity that reflects the corroboration; the CW-005 match on the
+same `.exe` is folded into it. The attack story then tells it in one line, the way
+it would go into a ticket:
+
+```text
+2019-01-19 13:00:10Z  NLLT108334 (10.0.2.16) -> IEWIN7 as IEWIN7\IEUser: copied 'blabla.exe' to ADMIN$, then ran it through PsExec with its service renamed to 'blabla'  [critical CW-012]
+```
+
+"Copied" is earned here: records 16 and 17 ask for `0x120196`, which includes
+WriteData. The story says "accessed" for a 5145 without a write bit.
 
 ## 7. ATT&CK mapping
 
@@ -227,18 +241,18 @@ expires = 2027-03-31
 RelativeTargetName = '^(svcctl|psexesvc|psexesvc\.exe|psexesvc-NLLT108334-\d+-(stdin|stdout|stderr))$'
 ```
 
-the renamed run is still reported (`findings   : 2  (critical 1, high 1)`), because
+the renamed run is still reported (`findings   : 1  (critical 1)`), because
 every evidence event must match the field regex (case-insensitively), and neither
 `blabla.exe` nor the `blabla-NLLT108334-37048-*` pipe names do. The bare
 `psexesvc` alternative is required: a stock run opens the `PSEXESVC` control pipe,
 which is a known tool pipe for CW-012 and so lands in its evidence. Without that
-alternative the entry suppresses only CW-005. I checked this with a synthetic stock
-run, not a recording: the same 22 records with `blabla` replaced by `PSEXESVC` in
-memory. With the entry above both findings were suppressed; with the bare `psexesvc`
-alternative removed, CW-012 was kept. For the real file, swapping `psexesvc` for
-`blabla` throughout the entry gives `findings   : 0` and `suppressed : 2 by allowlist`,
-so the regex structure itself is not what keeps the renamed run visible; the names
-are. An attacker reusing the admin host with a renamed service therefore stays
+alternative the run is kept. I checked this with a synthetic stock run, not a
+recording: the same 22 records with `blabla` replaced by `PSEXESVC` in memory. With
+the entry above, the CW-012 finding (with the CW-005 merged into it, which is why
+the entry lists both rules) was suppressed; with the bare `psexesvc` alternative
+removed, it was kept. For the real file, swapping `psexesvc` for `blabla` throughout
+the entry gives `findings   : 0` and `suppressed : 1 by allowlist`, so the regex
+structure itself is not what keeps the renamed run visible; the names are. An attacker reusing the admin host with a renamed service therefore stays
 visible. One more requirement applies once the System log is collected too: the 7045
 install of `PSEXESVC` is then credited to the same finding, and every evidence event
 must match one of the entry's field tables. Until a table describes the install,
@@ -289,7 +303,8 @@ What this single log cannot prove:
 - **That anything ran.** 5145 records an access *check* for *requested* rights. A
   write mask on `blabla.exe` is not proof that bytes were written, and no record shows
   the service starting or the process it spawned. crabwalk also treats any access to
-  an executable name on `ADMIN$` as a drop, without checking the mask.
+  an executable name on `ADMIN$` as a drop when it correlates; only the story's wording
+  ("copied" or "accessed") looks at the mask.
 - **The source name is client-supplied.** `NLLT108334` comes from the client's pipe
   name. A modified tool could write any name there. The address 10.0.2.16 is better
   evidence, and NAT or a proxy would hide even that.

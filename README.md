@@ -7,19 +7,21 @@
 
 **Windows EVTX lateral movement hunter** — parses Windows event logs, correlates
 logon/service/scheduled-task/named-pipe/PowerShell activity across hosts, draws the
-result as an **attack-path graph**, and maps every finding to MITRE ATT&CK.
+result as an **attack-path graph**, tells it as a dated **attack story**, and maps
+every finding to MITRE ATT&CK.
 
 > Crabs walk sideways. So do attackers.
 
-**[Live demo](https://ilkerunver00.github.io/crabwalk/)** — the report, the
-interactive attack-path graph and an ATT&CK Navigator heatmap, rebuilt from the
-bundled demo logs on every push.
+**[Live demo](https://ilkerunver00.github.io/crabwalk/)** — the attack story, the
+report, the interactive attack-path graph and an ATT&CK Navigator heatmap, rebuilt
+from the bundled demo logs on every push.
 
 ![crabwalk HTML report](https://raw.githubusercontent.com/IlkerUnver00/crabwalk/main/docs/report-screenshot.png)
 
-*The `crabwalk hunt --report` output over the [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)
-corpus: the attack paths it reconstructed (who moved where, how, and what fired on
-each host), then severity, ATT&CK coverage, a per-host timeline and ranked findings.*
+*The `crabwalk hunt --report` output for the bundled demo logs (recordings from
+[EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)): what
+happened, step by step, with its own caveats, then the attack paths it reconstructed;
+below the fold, ATT&CK coverage, a per-host timeline and ranked findings.*
 
 ## Try it in 30 seconds
 
@@ -30,13 +32,13 @@ from EVTX-ATTACK-SAMPLES; the code is MIT), so it finds something right after a 
 git clone https://github.com/IlkerUnver00/crabwalk.git
 cd crabwalk
 pip install -e .
-crabwalk hunt demo/evtx --report report.html --graph attack-paths.html
+crabwalk hunt demo/evtx --report report.html --graph attack-paths.html --story story.md
 ```
 
-16 findings, 4 critical. Among them, a renamed PsExec whose source machine
+14 findings, 4 critical. Among them, a renamed PsExec whose source machine
 (`NLLT108334`) is recovered from the target's own share-access log, a DCSync, and a
-multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`. [`demo/README.md`](demo/README.md)
-explains what each file shows.
+multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`, told as a [story](#the-attack-story).
+[`demo/README.md`](demo/README.md) explains what each file shows.
 
 ## Documentation
 
@@ -94,6 +96,8 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
       rebuilt on every push (report, attack-path graph, ATT&CK Navigator heatmap)
 - [x] **Step 13** — Documentation: a detection reference, a case write-up, a
       comparison with other tools, and Sigma translations of the CW-012 signals
+- [x] **Step 14** — Attack story (`--story`, report, live demo): the graph and the
+      findings told as dated steps; one event, one finding (cross-rule merging)
 
 ## Quickstart
 
@@ -103,7 +107,7 @@ crabwalk parse C:\evidence\logs --out timeline.jsonl
 crabwalk sessions C:\evidence\logs --out sessions.json
 crabwalk hunt C:\evidence\logs --out findings.json
 crabwalk hunt C:\evidence\logs --report report.html --layer navigator.json
-crabwalk hunt C:\evidence\logs --graph attack-paths.html
+crabwalk hunt C:\evidence\logs --graph attack-paths.html --story story.md
 crabwalk config --example > crabwalk.toml
 crabwalk hunt C:\evidence\logs --config crabwalk.toml --show-suppressed
 ```
@@ -125,7 +129,7 @@ HOST-TO-HOST MOVEMENT
 
 `hunt` runs every detection rule and prints ranked findings. Against the
 [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)
-dataset (278 files, 37k records) it produces 74 findings across 11 techniques,
+dataset (278 files, 37k records) it produces 72 findings across 11 techniques,
 including wmiexec's `cmd.exe /Q /c ... 1> \\127.0.0.1\ADMIN$\..` signature,
 `sekurlsa::pth` logons, an LSASS dump launched through WMI, and a renamed PsExec
 whose source machine is recovered from the target's own share-access log:
@@ -141,6 +145,60 @@ whose source machine is recovered from the target's own share-access log:
     host: MSEDGEWIN10   user: MSEDGEWIN10\IEUser   ATT&CK: T1047
     WmiPrvSE.exe (WMI) spawned 'rundll32 C:\windows\system32\comsvcs.dll, MiniDump 4868 ...'
 ```
+
+**One event, one finding.** When another rule's finding already cites every
+record of a finding, claims its techniques at no lower severity, and names the
+same host, account, source and time, the smaller one is listed under it ("also
+matched") instead of as a second finding: the ADMIN$ drop CW-005 reports is the
+same record CW-012 credits to that PsExec run. Two rules that disagree about
+who did it, or from where, stay two findings.
+
+## The attack story
+
+After the findings, `hunt` tells what happened, in order: one path per connected
+group of hosts, one dated line per step from host to host or per burst of findings
+on a host, as whom, from where. The same story leads the HTML report and the
+[live demo](https://ilkerunver00.github.io/crabwalk/); `--story FILE.md` writes it
+as Markdown for a ticket or case file, and `--out` adds it to the JSON. From the
+demo logs:
+
+```text
+Path 1: NLLT108334 -> PC01.example.corp -> WIN-77LTAPHIQ1R.example.corp (also: IEWIN7)
+  4 hosts · 2019-01-19 to 2019-04-30 · started from NLLT108334 · worst finding: critical
+  CAUTION: this path has gaps of 28 days, 29 days and 42 days. crabwalk links these hosts only
+  because they share host names and addresses; it has no case or incident ID, so confirm that
+  the steps belong to one intrusion before reporting them as one.
+  2019-01-19 13:00:10Z  NLLT108334 (10.0.2.16) -> IEWIN7 as IEWIN7\IEUser: copied 'blabla.exe'
+      to ADMIN$, then ran it through PsExec with its service renamed to 'blabla'  [critical CW-012]
+  2019-02-16 17:54:41Z–17:57:55Z  (28 days later) 10.0.2.16 (named NLLT108334 elsewhere in the
+      logs) -> PC01.example.corp as PC01\IEUser: copied 'System32\RemComSvc.exe' to ADMIN$, then
+      used the service control manager remotely (svcctl)  [critical CW-012]
+  ...
+  2019-03-18 11:06:29Z  on PC01.example.corp as EXAMPLE\user01: started a process with injected
+      credentials (logon type 9 via seclogo: the sekurlsa::pth pattern)  [high CW-003]
+  2019-03-18 11:27:23Z  PC01.example.corp -> WIN-77LTAPHIQ1R.example.corp as EXAMPLE\Administrator:
+      used explicit credentials (4648) 3 times
+  ...
+```
+
+It is generated, not written: every line is a movement step on a graph edge or
+a burst of one rule's findings, so it traces back to findings and their records.
+It is written to say what the records show and no more:
+
+- **Sources as the step saw them.** A step names its source the way its own
+  records do; a name learned from other records is said to be ("10.0.2.16 (named
+  NLLT108334 elsewhere in the logs)"). External addresses are marked, and remote
+  activity with no named source says so.
+- **Each record once, each time shown.** A logon a finding already cites is not
+  counted again, anonymous null sessions are not counted as admin logons, a line
+  that spans time shows the span, and a repeat later on is its own line.
+- **Accounts by identity.** One account is one name across the story, joined by
+  SID where the records give one (never for local accounts: hosts cloned from one
+  image share local SIDs).
+- **Doubt up front.** Gaps of more than a day are marked, and a path with
+  week-long gaps gets a caution before its steps: crabwalk links hosts by name
+  and address, not by case. Findings with a null (1601) time are counted, not
+  placed.
 
 ## Attack paths
 
@@ -235,7 +293,10 @@ cannot tell a trojaned `ccmsetup.exe` from the real one, so keep `users` and
   NetBIOS name is not the first label of its DNS name, list both forms.
 - **Nothing disappears silently.** Suppressed findings are counted on the
   console (`--show-suppressed` lists them), written to the JSON output with the
-  allow entry that matched, and listed in the HTML report. Expired entries are
+  allow entry that matched, and listed in the HTML report. An entry suppresses a
+  finding only if it also matches each finding merged into it, by that finding's
+  own rule, account and source; otherwise the finding is kept and `hunt` says
+  which rule the entry left out. Expired entries are
   reported and not applied. The JSON also records the effective settings next
   to the findings they produced.
 - Command-line flags layer over the file: `--rule ID` (run only), `--disable ID`,

@@ -5,18 +5,18 @@ clone, with no download and no lab:
 
 ```bash
 pip install -e .
-crabwalk hunt demo/evtx --report report.html --graph attack-paths.html
+crabwalk hunt demo/evtx --report report.html --graph attack-paths.html --story story.md
 ```
 
 ```text
 files      : 9
 records    : 129  (kept: 123, unparsable: 0)
 sessions   : 13 | edges: 12
-findings   : 16  (critical 4, high 8, medium 4)
+findings   : 14  (critical 4, high 6, medium 4)
 ```
 
-The same output is published as a live report on the project's GitHub Pages
-site, rebuilt from this folder on every push.
+The same output, led by the attack story, is published as a live report on the
+project's GitHub Pages site, rebuilt from this folder on every push.
 
 ## Where the files come from — and their licence
 
@@ -32,8 +32,8 @@ files in this folder. crabwalk's source code is MIT (see the repository root
 
 | File | Host | What crabwalk finds |
 |---|---|---|
-| `LM_renamed_psexecsvc_5145.evtx` | IEWIN7 | A PsExec run with the service renamed to `blabla`, seen only in the target's 5145 share-access log. CW-012 (critical) recovers the **source machine, NLLT108334 at 10.0.2.16**, from the stdio pipe names. CW-005 flags the binary written to ADMIN$. |
-| `LM_REMCOM_5145_TargetHost.evtx` | PC01 | RemCom (the engine of impacket's psexec): `RemComSvc.exe` copied to ADMIN$, then remote service control over `svcctl`. CW-012 critical, CW-005. |
+| `LM_renamed_psexecsvc_5145.evtx` | IEWIN7 | A PsExec run with the service renamed to `blabla`, seen only in the target's 5145 share-access log. CW-012 (critical) recovers the **source machine, NLLT108334 at 10.0.2.16**, from the stdio pipe names. CW-005 also matches the binary written to ADMIN$; since CW-012 already cites that record, it is listed under the CW-012 finding. |
+| `LM_REMCOM_5145_TargetHost.evtx` | PC01 | RemCom (the engine of impacket's psexec): `RemComSvc.exe` copied to ADMIN$, then remote service control over `svcctl`. CW-012 critical (with that ADMIN$ copy's CW-005 merged into it), and a separate CW-005 for a later local access to the binary over C$. |
 | `LM_sysmon_psexec_smb_meterpreter.evtx` | IEWIN7 | Metasploit psexec on a Sysmon-only host: a remote `\ntsvcs` pipe connection, then a service whose ImagePath is a `%COMSPEC% ... powershell -nop -w hidden` command line. CW-012 critical, T1543.003. |
 | `LM_ScheduledTask_ATSVC_target_host.evtx` | WIN-77LTAPHIQ1R | atexec-style remote task: `atsvc` pipe access from 10.0.2.17, then a randomly named task. CW-012, T1053.005. |
 | `LM_WMIC_4648_rpcss.evtx` | PC01 | The *source* side of a WMI hop: 4648 explicit credentials towards WIN-77LTAPHIQ1R. |
@@ -50,8 +50,11 @@ them wherever the evidence links names and addresses. For example,
 `NLLT108334 → PC01` exists because 10.0.2.16 is named NLLT108334 in one
 recording and appears as the RemCom client in another. That is correct
 correlation for a single investigation. Across unrelated captures, read it as
-"the same lab address" rather than "the same attacker". The log-clearing
-findings (CW-009) are part of how the original samples were recorded.
+"the same lab address" rather than "the same attacker". The attack story says
+this itself: its PC01 step reads "10.0.2.16 (named NLLT108334 elsewhere in the
+logs)", and the path opens with a caution about its 28- to 42-day gaps. The
+log-clearing findings (CW-009) are part of how the original samples were
+recorded.
 
 For the full corpus (278 files) and the ground-truth tests built on it, see
 [Validation](../README.md#validation) in the main README.

@@ -24,7 +24,9 @@ hosts, and Zircolite correlates across files. What crabwalk adds is a
 and builds movement edges between hosts. The edges come from logon events (4624,
 4648, RDP) and also from detections that are not logons: PsExec pipe names in 5145
 and executables dropped on ADMIN$. It works out that an IP address and a hostname
-are the same machine, and draws the result as an attack-path graph. Use it
+are the same machine, draws the result as an attack-path graph, and tells it as a
+dated story (one line per step, as whom, from where, with its own doubts stated).
+Use it
 **alongside** a Sigma engine, not instead of one.
 
 ## Per-tool notes
@@ -88,7 +90,7 @@ Hayabusa implements field aliases is not verified.
 
 | Tool | Runtime | Input | Output | Licence |
 |---|---|---|---|---|
-| crabwalk | Python ≥ 3.10; deps `evtx` (+ `tomli` on 3.10) | `.evtx` files and directories | console; JSONL events; JSON sessions/findings; HTML report; ATT&CK Navigator layer; graph as HTML/DOT/JSON | MIT |
+| crabwalk | Python ≥ 3.10; deps `evtx` (+ `tomli` on 3.10) | `.evtx` files and directories | console; JSONL events; JSON sessions/findings; HTML report; ATT&CK Navigator layer; graph as HTML/DOT/JSON; attack story (text/Markdown/HTML) | MIT |
 | Chainsaw | Rust[^cs-readme] | EVTX, JSON, JSONL, XML; MFT, hives, ESE, SRUM, Shimcache/Amcache[^cs-readme][^cs-file] | table, CSV, JSON, log[^cs-readme]; JSONL[^cs-main] | GPL-3.0[^cs-lic] |
 | Hayabusa | Rust[^hb-readme] | EVTX, JSON/JSONL (`-J`), live (`-l`)[^hb-timeline] | CSV/JSON/JSONL timeline, HTML summary[^hb-timeline] | AGPL-3.0[^hb-readme] |
 | Zircolite | Python 3.10+, standalone binaries[^zc] | EVTX, XML, JSONL, CSV, JSON array, Auditd, Sysmon for Linux, archives[^zc] | JSON, CSV, templates (Splunk, Elastic, Timesketch, SARIF, Navigator…)[^zc] | LGPL-3.0[^zc] |
@@ -101,7 +103,7 @@ Hayabusa implements field aliases is not verified.
 
 | Tool | Rules | Timeline | Cross-event / cross-host correlation | Offline |
 |---|---|---|---|---|
-| crabwalk | 12 Python rules, ATT&CK-tagged; tunable via TOML | time-sorted JSONL; per-host swimlane in report | LogonId sessions per host (4672 backfill); 4624/4648/RDP edges; IP↔name host resolution (not time-scoped); two-hop RDP chains (A→B→C within a tunable 6 h window); PsExec source host from pipe names; attack-path graph | no network code |
+| crabwalk | 12 Python rules, ATT&CK-tagged; tunable via TOML | time-sorted JSONL; per-host swimlane in report | LogonId sessions per host (4672 backfill); 4624/4648/RDP edges; IP↔name host resolution (not time-scoped); two-hop RDP chains (A→B→C within a tunable 6 h window); PsExec source host from pipe names; one event told once across rules; attack-path graph and dated story | no network code |
 | Chainsaw | Sigma (external) + 131 Chainsaw rule files[^cs-rules] | Shimcache/Amcache execution timeline[^cs-readme] | Sigma `count() by` only, no timeframe[^cs-sigma]; v2 correlation not found[^cs-search] | all-in-one release with rules[^cs-readme] |
 | Hayabusa | 4,000+ curated[^hb-docs] | yes, core purpose[^hb-readme] | Sigma v2: 4 types, `group-by`[^hb-corr]; logon counts[^hb-analysis]; sessions/host graph not found in docs | yes; `update-rules` needs network[^hb-readme] |
 | Zircolite | Sigma → SQLite; 4,515 in default set[^zc-rules] | Timesketch template, GUI[^zc] | counts, temporal sequences, chained rules, cross-file[^zc]; host graph not documented | yes; standalone binaries; `-U` rule update needs network[^zc] |
@@ -121,7 +123,7 @@ a renamed PsExec seen only through the target's share-access log (5145):
 files      : 1
 records    : 22  (kept: 22, unparsable: 0)
 sessions   : 0 | edges: 0
-findings   : 2  (critical 1, high 1)
+findings   : 1  (critical 1)
 
 [CRITICAL] 2019-01-19 13:00:10Z  CW-012  Remote execution over named pipes
     host: IEWIN7   user: IEWIN7\IEUser   ATT&CK: T1021.002, T1569.002, T1570
@@ -129,7 +131,8 @@ findings   : 2  (critical 1, high 1)
 ```
 
 `psexec.json` holds 2 host nodes and 1 edge, `NLLT108334 → IEWIN7`, carrying the
-CW-012 and CW-005 findings. The file has no logon events, so there are no sessions;
+CW-012 finding (CW-005 matches the same `ADMIN$` record and is listed under it, not
+as a second finding). The file has no logon events, so there are no sessions;
 the source host comes from the pipe names. CW-012 recovers the attacker's machine
 `NLLT108334` from `\blabla-NLLT108334-37048-stdin` and ties it to client address
 10.0.2.16. A per-event rule can match that pipe name, but it does not turn the
@@ -153,7 +156,7 @@ Running over all of it checks robustness; the resulting graph is not one intrusi
 files      : 278
 records    : 37364  (kept: 3011, unparsable: 0)
 sessions   : 79 | edges: 36
-findings   : 74  (critical 4, high 53, medium 17)
+findings   : 72  (critical 4, high 51, medium 17)
 ...
 ```
 
@@ -166,6 +169,9 @@ are not proven attack paths. The edge `NLLT108334 → PC01` (2019-02-16) comes f
 that file gives `ip:10.0.2.16 → pc01`. The name was learned from the IEWIN7 capture
 of 2019-01-19 above, where the same address appears with that name. That edge
 connects the January capture to the February and March ones in a single component.
+The attack story does not hide this: it names that step's source "10.0.2.16 (named
+NLLT108334 elsewhere in the logs)" and opens the path with a caution that its steps
+are weeks apart and joined only by names and addresses.
 
 The limits come from the same design. Host resolution only works when the logs
 pair an address with a name. Host resolution is not time-scoped: an address
@@ -192,7 +198,7 @@ the 12 rules and nothing else.
   of them: version 0.1.0, validated mainly against one public corpus.
 
 A Sigma engine finds suspicious events; crabwalk links lateral-movement events
-into a path. Run both and compare their output.
+into a path and tells it as a story. Run both and compare their output.
 
 [^cs-readme]: Chainsaw README, <https://github.com/WithSecureOpenSource/chainsaw> (moved from WithSecureLabs/chainsaw).
 [^cs-lic]: GitHub REST API `repos/WithSecureOpenSource/chainsaw`, `license.spdx_id` = GPL-3.0; licence file <https://github.com/WithSecureOpenSource/chainsaw/blob/master/LICENCE>.
