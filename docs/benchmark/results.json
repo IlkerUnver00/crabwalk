@@ -1,0 +1,2201 @@
+{
+  "meta": {
+    "versions": {
+      "crabwalk": "0.1.0",
+      "hayabusa": "Hayabusa v4.1.0 - Suzumushi Release",
+      "chainsaw": "chainsaw 2.16.5"
+    },
+    "corpus": "sbousseaden/EVTX-ATTACK-SAMPLES",
+    "corpus_commit": "4ceed2f4706daf601c212a8f91c113dd85349a2c",
+    "folder": "Lateral Movement",
+    "files": 47,
+    "platform": "Windows 11, Python 3.12.10",
+    "criteria": {
+      "medium_plus": [
+        "critical",
+        "high",
+        "medium"
+      ],
+      "lateral": "tactic lateral movement or T1021, T1570, T1550, T1563, T1210, T1534, T1080, T1072"
+    }
+  },
+  "summary": {
+    "crabwalk": {
+      "files": 47,
+      "files_with_medium_plus": 16,
+      "files_with_lateral_medium_plus": 10,
+      "files_with_any_alert": 16,
+      "alerts_total": 34,
+      "medium_plus_total": 34,
+      "median_medium_plus_per_detected_file": 1.5,
+      "max_medium_plus_in_a_file": 5
+    },
+    "hayabusa": {
+      "files": 47,
+      "files_with_medium_plus": 29,
+      "files_with_lateral_medium_plus": 8,
+      "files_with_any_alert": 38,
+      "alerts_total": 1221,
+      "medium_plus_total": 130,
+      "median_medium_plus_per_detected_file": 2,
+      "max_medium_plus_in_a_file": 24
+    },
+    "chainsaw": {
+      "files": 47,
+      "files_with_medium_plus": 27,
+      "files_with_lateral_medium_plus": 6,
+      "files_with_any_alert": 30,
+      "alerts_total": 180,
+      "medium_plus_total": 110,
+      "median_medium_plus_per_detected_file": 2,
+      "max_medium_plus_in_a_file": 26
+    }
+  },
+  "timing_whole_corpus": {
+    "crabwalk": {
+      "seconds": 0.9,
+      "alerts": 72,
+      "by_level": {
+        "medium": 17,
+        "high": 51,
+        "critical": 4
+      },
+      "medium_plus": 72,
+      "lateral_medium_plus": 25
+    },
+    "hayabusa": {
+      "seconds": 8.1,
+      "alerts": 5360,
+      "by_level": {
+        "informational": 3267,
+        "low": 538,
+        "medium": 948,
+        "high": 583,
+        "critical": 24
+      },
+      "medium_plus": 1555,
+      "lateral_medium_plus": 60
+    },
+    "chainsaw": {
+      "seconds": 18.3,
+      "alerts": 1726,
+      "by_level": {
+        "informational": 44,
+        "low": 336,
+        "medium": 666,
+        "high": 612,
+        "critical": 68
+      },
+      "medium_plus": 1346,
+      "lateral_medium_plus": 36
+    }
+  },
+  "files": [
+    {
+      "file": "DFIR_RDP_Client_TimeZone_RdpCoreTs_104_example.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "dfir_rdpsharp_target_RdpCoreTs_168_68_131.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "ImpersonateUser-via local Pass The Hash Sysmon and Security.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 18,
+          "by_level": {
+            "informational": 11,
+            "low": 4,
+            "medium": 3
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Uncommon Svchost Parent Process",
+              2
+            ],
+            [
+              "Net Conn (Sysmon Alert)",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 5,
+          "by_level": {
+            "low": 3,
+            "medium": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Uncommon Svchost Parent Process",
+              2
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "lateral_movement_startup_3_11.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 3,
+          "by_level": {
+            "informational": 2,
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Startup Folder File Write",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Startup Folder File Write",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_4624_mimikatz_sekurlsa_pth_source_machine.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 2,
+          "by_level": {
+            "high": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-003 Pass-the-hash indicators",
+              1
+            ],
+            [
+              "CW-009 Event log cleared",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 9,
+          "by_level": {
+            "informational": 5,
+            "low": 1,
+            "medium": 1,
+            "high": 2
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 2,
+          "titles_medium_plus": [
+            [
+              "Log Cleared",
+              1
+            ],
+            [
+              "Pass the Hash Activity 2",
+              1
+            ],
+            [
+              "Successful Overpass the Hash Attempt",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 4,
+          "by_level": {
+            "low": 1,
+            "medium": 1,
+            "high": 1,
+            "critical": 1
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 2,
+          "titles_medium_plus": [
+            [
+              "Pass the Hash Activity 2",
+              1
+            ],
+            [
+              "Security Audit Logs Cleared",
+              1
+            ],
+            [
+              "Successful Overpass the Hash Attempt",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_5145_Remote_FileCopy.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 5,
+          "by_level": {
+            "high": 5
+          },
+          "medium_plus": 5,
+          "lateral_medium_plus": 5,
+          "titles_medium_plus": [
+            [
+              "CW-005 Executable on administrative share",
+              5
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 853,
+          "by_level": {
+            "informational": 853
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_add_new_namedpipe_tp_nullsession_registry_turla_like_ttp.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Reg Key Value Set (Sysmon Alert)",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_DCOM_MSHTA_LethalHTA_Sysmon_3_1.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 3,
+          "by_level": {
+            "informational": 2,
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Potential LethalHTA Technique Execution",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Potential LethalHTA Technique Execution",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_dcom_shwnd_shbrwnd_mmc20_failed_traces_system_10016.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_ImageLoad_NFSH_Sysmon_7.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 2,
+          "by_level": {
+            "medium": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Unsigned Image Loaded Into LSASS Process",
+              2
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 2,
+          "by_level": {
+            "medium": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Unsigned Image Loaded Into LSASS Process",
+              2
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_impacket_docmexec_mmc_sysmon_01.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 25,
+          "by_level": {
+            "informational": 9,
+            "low": 4,
+            "medium": 2,
+            "high": 10
+          },
+          "medium_plus": 12,
+          "lateral_medium_plus": 7,
+          "titles_medium_plus": [
+            [
+              "HackTool - Potential Impacket Lateral Movement Activity",
+              3
+            ],
+            [
+              "MMC Spawning Windows Shell",
+              3
+            ],
+            [
+              "Suspicious Redirection to Local Admin Share",
+              3
+            ],
+            [
+              "Enumerate All Information With Whoami.EXE",
+              1
+            ],
+            [
+              "MMC20 Lateral Movement",
+              1
+            ],
+            [
+              "Whoami.EXE Execution With Output Option",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 12,
+          "by_level": {
+            "low": 5,
+            "medium": 3,
+            "high": 4
+          },
+          "medium_plus": 7,
+          "lateral_medium_plus": 4,
+          "titles_medium_plus": [
+            [
+              "Cmd Stream Redirection",
+              3
+            ],
+            [
+              "MMC Spawning Windows Shell",
+              3
+            ],
+            [
+              "MMC20 Lateral Movement",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_NewShare_Added_Sysmon_12_13.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_PowershellRemoting_sysmon_1_wsmprovhost.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-007 Remote execution via WinRM",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 3,
+          "by_level": {
+            "low": 1,
+            "medium": 1,
+            "high": 1
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "Proc Exec (Sysmon Alert)",
+              1
+            ],
+            [
+              "Remote PowerShell Session Host Process (WinRM)",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 2,
+          "by_level": {
+            "low": 1,
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "Remote PowerShell Session Host Process (WinRM)",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_regsvc_DirectoryServiceExtPt_Lsass_NTDS_AdamXpn.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 6,
+          "by_level": {
+            "informational": 4,
+            "high": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "DLL Load via LSASS",
+              2
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 2,
+          "by_level": {
+            "high": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "DLL Load via LSASS",
+              2
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_REMCOM_5145_TargetHost.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 2,
+          "by_level": {
+            "high": 1,
+            "critical": 1
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 2,
+          "titles_medium_plus": [
+            [
+              "CW-005 Executable on administrative share",
+              1
+            ],
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 20,
+          "by_level": {
+            "informational": 20
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "lm_remote_registry_sysmon_1_13_3.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 5,
+          "by_level": {
+            "informational": 2,
+            "low": 1,
+            "medium": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CurrentVersion Autorun Keys Modification",
+              1
+            ],
+            [
+              "Uncommon Svchost Parent Process",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 3,
+          "by_level": {
+            "low": 1,
+            "medium": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CurrentVersion Autorun Keys Modification",
+              1
+            ],
+            [
+              "Uncommon Svchost Parent Process",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_Remote_Service01_5145_svcctl.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_Remote_Service02_7045.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 5,
+          "by_level": {
+            "informational": 3,
+            "high": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Suspicious Service Path",
+              2
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 3,
+          "by_level": {
+            "low": 3
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_renamed_psexecsvc_5145.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 2,
+          "by_level": {
+            "informational": 2
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_ScheduledTask_ATSVC_target_host.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 5,
+          "by_level": {
+            "medium": 3,
+            "high": 2
+          },
+          "medium_plus": 5,
+          "lateral_medium_plus": 4,
+          "titles_medium_plus": [
+            [
+              "CW-003 Pass-the-hash indicators",
+              3
+            ],
+            [
+              "CW-009 Event log cleared",
+              1
+            ],
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 31,
+          "by_level": {
+            "informational": 25,
+            "low": 1,
+            "medium": 2,
+            "high": 3
+          },
+          "medium_plus": 5,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Password Policy Enumerated",
+              2
+            ],
+            [
+              "AD Privileged Users or Groups Reconnaissance",
+              1
+            ],
+            [
+              "Log Cleared",
+              1
+            ],
+            [
+              "Reconnaissance Activity",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 11,
+          "by_level": {
+            "informational": 4,
+            "low": 2,
+            "medium": 2,
+            "high": 2,
+            "critical": 1
+          },
+          "medium_plus": 5,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Password Policy Enumerated",
+              2
+            ],
+            [
+              "AD Privileged Users or Groups Reconnaissance",
+              1
+            ],
+            [
+              "Reconnaissance Activity",
+              1
+            ],
+            [
+              "Security Audit Logs Cleared",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "lm_sysmon_18_remshell_over_namedpipe.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 12,
+          "by_level": {
+            "informational": 5,
+            "low": 5,
+            "medium": 1,
+            "critical": 1
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Enumerate All Information With Whoami.EXE",
+              1
+            ],
+            [
+              "Malicious Named Pipe Created",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 6,
+          "by_level": {
+            "low": 5,
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Malicious Named Pipe Created",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_sysmon_1_12_13_3_tsclient_SharpRdp.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 8,
+          "by_level": {
+            "informational": 3,
+            "low": 1,
+            "high": 4
+          },
+          "medium_plus": 4,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "RunMRU Registry Key Deletion - Registry",
+              4
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 5,
+          "by_level": {
+            "low": 1,
+            "high": 4
+          },
+          "medium_plus": 4,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "RunMRU Registry Key Deletion - Registry",
+              4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_sysmon_3_12_13_1_SharpRDP.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 35,
+          "by_level": {
+            "informational": 12,
+            "low": 4,
+            "medium": 2,
+            "high": 17
+          },
+          "medium_plus": 19,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "RunMRU Registry Key Deletion - Registry",
+              17
+            ],
+            [
+              "Elevated System Shell Spawned",
+              1
+            ],
+            [
+              "Elevated System Shell Spawned From Uncommon Parent Location",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 23,
+          "by_level": {
+            "low": 4,
+            "medium": 2,
+            "high": 17
+          },
+          "medium_plus": 19,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "RunMRU Registry Key Deletion - Registry",
+              17
+            ],
+            [
+              "Elevated System Shell Spawned",
+              1
+            ],
+            [
+              "Elevated System Shell Spawned From Uncommon Parent Location",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_sysmon_3_DCOM_ShellBrowserWindow_ShellWindows.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 3,
+          "by_level": {
+            "informational": 3
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_sysmon_psexec_smb_meterpreter.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 36,
+          "by_level": {
+            "informational": 6,
+            "low": 6,
+            "medium": 13,
+            "high": 11
+          },
+          "medium_plus": 24,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "Base64 Encoded PowerShell Command Detected",
+              3
+            ],
+            [
+              "Elevated System Shell Spawned",
+              3
+            ],
+            [
+              "Gzip Archive Decode Via PowerShell",
+              3
+            ],
+            [
+              "Suspicious FromBase64String Usage On Gzip Archive - Process Creation",
+              3
+            ],
+            [
+              "Suspicious PowerShell Invocations - Specific - ProcessCreation",
+              3
+            ],
+            [
+              "Suspicious SYSTEM User Process Creation",
+              3
+            ],
+            [
+              "Potential PowerShell Command Line Obfuscation",
+              2
+            ],
+            [
+              "Abused Debug Privilege by Arbitrary Parent Processes",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 31,
+          "by_level": {
+            "low": 5,
+            "medium": 12,
+            "high": 14
+          },
+          "medium_plus": 26,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "Base64 Encoded PowerShell Command Detected",
+              3
+            ],
+            [
+              "Elevated System Shell Spawned",
+              3
+            ],
+            [
+              "Godmode Sigma Rule",
+              3
+            ],
+            [
+              "Gzip Archive Decode Via PowerShell",
+              3
+            ],
+            [
+              "Suspicious FromBase64String Usage On Gzip Archive - Process Creation",
+              3
+            ],
+            [
+              "Suspicious PowerShell Invocations - Specific - ProcessCreation",
+              3
+            ],
+            [
+              "Suspicious SYSTEM User Process Creation",
+              3
+            ],
+            [
+              "Potential PowerShell Command Line Obfuscation",
+              2
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_sysmon_remote_task_src_powershell.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 4,
+          "by_level": {
+            "informational": 2,
+            "low": 2
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_tsclient_startup_folder.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 7,
+          "by_level": {
+            "informational": 4,
+            "low": 1,
+            "medium": 1,
+            "high": 1
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Hijack Legit RDP Session to Move Laterally",
+              1
+            ],
+            [
+              "Startup Folder File Write",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 6,
+          "by_level": {
+            "low": 4,
+            "medium": 1,
+            "high": 1
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Hijack Legit RDP Session to Move Laterally",
+              1
+            ],
+            [
+              "Startup Folder File Write",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_typical_IIS_webshell_sysmon_1_10_traces.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 9,
+          "by_level": {
+            "informational": 3,
+            "low": 5,
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Suspicious Process By Web Server Process",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 6,
+          "by_level": {
+            "low": 5,
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Suspicious Process By Web Server Process",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_winrm_exec_sysmon_1_winrshost.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 4,
+          "by_level": {
+            "informational": 3,
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "Potential Lateral Movement via Windows Remote Shell",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "Potential Lateral Movement via Windows Remote Shell",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_winrm_target_wrmlogs_91_wsmanShellStarted_poorLog.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-007 Remote execution via WinRM",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_WMI_4624_4688_TargetHost.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 6,
+          "by_level": {
+            "informational": 6
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 5,
+          "by_level": {
+            "informational": 5
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "LM_wmi_PoisonHandler_Mr-Un1k0d3r_sysmon_1_13.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 4,
+          "by_level": {
+            "medium": 1,
+            "high": 3
+          },
+          "medium_plus": 4,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CW-006 Process spawned via WMI",
+              4
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 20,
+          "by_level": {
+            "informational": 11,
+            "medium": 7,
+            "high": 2
+          },
+          "medium_plus": 9,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "WmiPrvSE Spawned A Process",
+              4
+            ],
+            [
+              "Potentially Suspicious Rundll32 Activity",
+              2
+            ],
+            [
+              "Suspicious WmiPrvSE Child Process",
+              2
+            ],
+            [
+              "Explorer Process Tree Break",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 8,
+          "by_level": {
+            "medium": 6,
+            "high": 2
+          },
+          "medium_plus": 8,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "WmiPrvSE Spawned A Process",
+              4
+            ],
+            [
+              "Potentially Suspicious Rundll32 Activity",
+              2
+            ],
+            [
+              "Suspicious WmiPrvSE Child Process",
+              2
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_WMIC_4648_rpcss.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CW-009 Event log cleared",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 7,
+          "by_level": {
+            "informational": 2,
+            "medium": 2,
+            "high": 3
+          },
+          "medium_plus": 5,
+          "lateral_medium_plus": 4,
+          "titles_medium_plus": [
+            [
+              "Explicit Logon Attempt (Susp Proc) - Possible Mimikatz PrivEsc",
+              2
+            ],
+            [
+              "Suspicious Remote Logon with Explicit Credentials",
+              2
+            ],
+            [
+              "Log Cleared",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 3,
+          "by_level": {
+            "medium": 2,
+            "critical": 1
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 2,
+          "titles_medium_plus": [
+            [
+              "Suspicious Remote Logon with Explicit Credentials",
+              2
+            ],
+            [
+              "Security Audit Logs Cleared",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_wmiexec_impacket_sysmon_whoami.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 3,
+          "by_level": {
+            "high": 3
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CW-006 Process spawned via WMI",
+              3
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 22,
+          "by_level": {
+            "informational": 7,
+            "low": 4,
+            "medium": 5,
+            "high": 6
+          },
+          "medium_plus": 11,
+          "lateral_medium_plus": 3,
+          "titles_medium_plus": [
+            [
+              "HackTool - Potential Impacket Lateral Movement Activity",
+              3
+            ],
+            [
+              "Suspicious Redirection to Local Admin Share",
+              3
+            ],
+            [
+              "WmiPrvSE Spawned A Process",
+              3
+            ],
+            [
+              "Enumerate All Information With Whoami.EXE",
+              1
+            ],
+            [
+              "Whoami.EXE Execution With Output Option",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 8,
+          "by_level": {
+            "low": 5,
+            "medium": 3
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "WmiPrvSE Spawned A Process",
+              3
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "LM_xp_cmdshell_MSSQL_Events.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 3,
+          "by_level": {
+            "high": 3
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "MSSQL XPCmdshell Option Change",
+              2
+            ],
+            [
+              "MSSQL XPCmdshell Suspicious Execution",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 4,
+          "by_level": {
+            "medium": 4
+          },
+          "medium_plus": 4,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Potential MSSQL Suspicious Activity",
+              4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "MSSQL_15281_xp_cmdshell_exec_failed_attempt.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "net_share_drive_5142.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CW-009 Event log cleared",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Log Cleared",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 1,
+          "by_level": {
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Security Audit Logs Cleared",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "powercat_revShell_sysmon_1_3.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 11,
+          "by_level": {
+            "informational": 6,
+            "low": 5
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 6,
+          "by_level": {
+            "low": 6
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "remote task update 4624 4702 same logonid.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 2,
+          "by_level": {
+            "high": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CW-004 Scheduled task created from remote session",
+              1
+            ],
+            [
+              "CW-009 Event log cleared",
+              1
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 5,
+          "by_level": {
+            "informational": 3,
+            "high": 2
+          },
+          "medium_plus": 2,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Log Cleared",
+              1
+            ],
+            [
+              "Suspicious Scheduled Task Update",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 4,
+          "by_level": {
+            "informational": 3,
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Security Audit Logs Cleared",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "remote_file_copy_system_proc_file_write_sysmon_11.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 4,
+          "by_level": {
+            "informational": 2,
+            "low": 1,
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "PsExec Service Execution",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 4,
+          "by_level": {
+            "low": 3,
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "PsExec Service Execution",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "RemotePowerShell_MS_Windows-Remote_Management_EventID_169.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "sharprdp_sysmon_7_mstscax.dll.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 4,
+          "by_level": {
+            "informational": 1,
+            "low": 3
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "smb_bi_auth_conn_spoolsample.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 2,
+          "by_level": {
+            "informational": 2
+          },
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "smbmap_upload_exec_sysmon.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 3,
+          "by_level": {
+            "high": 3
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CW-006 Process spawned via WMI",
+              3
+            ]
+          ]
+        },
+        "hayabusa": {
+          "alerts": 24,
+          "by_level": {
+            "informational": 14,
+            "low": 3,
+            "medium": 3,
+            "high": 4
+          },
+          "medium_plus": 7,
+          "lateral_medium_plus": 3,
+          "titles_medium_plus": [
+            [
+              "HackTool - Potential Impacket Lateral Movement Activity",
+              3
+            ],
+            [
+              "WmiPrvSE Spawned A Process",
+              3
+            ],
+            [
+              "Suspicious WmiPrvSE Child Process",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 8,
+          "by_level": {
+            "low": 3,
+            "medium": 4,
+            "high": 1
+          },
+          "medium_plus": 5,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "WmiPrvSE Spawned A Process",
+              3
+            ],
+            [
+              "Cmd Stream Redirection",
+              1
+            ],
+            [
+              "Suspicious WmiPrvSE Child Process",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "spoolsample_5145.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "chainsaw": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        }
+      }
+    },
+    {
+      "file": "sysmon_1_exec_via_sql_xpcmdshell.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 3,
+          "by_level": {
+            "informational": 1,
+            "low": 1,
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Suspicious Child Process Of SQL Server",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 4,
+          "by_level": {
+            "low": 1,
+            "medium": 1,
+            "high": 2
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "Cmd Stream Redirection",
+              1
+            ],
+            [
+              "Execution via MSSQL Xp_cmdshell Stored Procedure",
+              1
+            ],
+            [
+              "Suspicious Child Process Of SQL Server",
+              1
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "file": "wmi_remote_registry_sysmon.evtx",
+      "tools": {
+        "crabwalk": {
+          "alerts": 0,
+          "by_level": {},
+          "medium_plus": 0,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": []
+        },
+        "hayabusa": {
+          "alerts": 5,
+          "by_level": {
+            "informational": 4,
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CurrentVersion Autorun Keys Modification",
+              1
+            ]
+          ]
+        },
+        "chainsaw": {
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 0,
+          "titles_medium_plus": [
+            [
+              "CurrentVersion Autorun Keys Modification",
+              1
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

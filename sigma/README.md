@@ -248,3 +248,17 @@ the install to.
   and `eval` helper fields (`DetailsMatch`, `DetailsCondition`) in front of the `search`.
   The ImagePath rule keeps its OR to plain `contains` values, so its query stays one
   `search` plus one `regex` filter.
+
+**In the EVTX rule engines (tested 2026-10-08).** The rules are valid Sigma, but two common
+offline engines need a flag or a small rewrite to run them. Each file was run on the corpus
+sample it was written for, during the [benchmark](../docs/BENCHMARK.md):
+
+| Engine | Loads | Fires as written | Why |
+|---|---|---|---|
+| Hayabusa 4.1.0 (`dfir-timeline -r sigma/`) | all 6 rule documents | none by default; all with `-A` | Hayabusa's channel filter skips rules that name no `Channel` ("Detection rules enabled after channel filter: 1"), and raw Sigma rules leave the channel to the `logsource`. With `-A` (`--enable-all-rules`) every file fires as written, `\|re\|i` and the correlation included: the IPC$ and ADMIN$ rules on records 84050 to 84052 and 84038 to 84039, the correlation once, the three Sysmon rules on their samples (6, 1 and 1 events). Adding `Channel: Security` to the IPC$ rule is also enough. |
+| Chainsaw 2.16.5 (`hunt -s sigma/ --mapping sigma-event-logs-all.yml`) | 1 of 5 rules | the hex-pipe rule, on its sample | `chainsaw lint` rejects the others with "unsupported modifiers - i": the Sigma 2.0 `\|re\|i` sub-modifier. Rewritten as `\|re` with an inline `(?i)`, all files validate and all five rules fire on their samples: the IPC$ and ADMIN$ rules on 3 and 2 records, the Sysmon stdio-pipe and ImagePath rules on 6 and 1 events. Chainsaw does not run the correlation. This repo keeps `\|re\|i`, the spec's portable form. |
+
+To use them there, run Hayabusa with `-A`, and for Chainsaw replace `|re|i: '...'` with
+`|re: '(?i)...'`. The benchmark also found that neither engine fires SigmaHQ's own
+*Suspicious PsExec Execution* rule on `LM_renamed_psexecsvc_5145.evtx` as shipped, because of
+how they match its escaped `ShareName` value; see [BENCHMARK.md](../docs/BENCHMARK.md#cases).

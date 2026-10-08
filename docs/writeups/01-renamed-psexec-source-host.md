@@ -180,8 +180,14 @@ open. Sigma does define correlation rules (`event_count`, `value_count`, `tempor
 and others in the
 [2.1.0 specification](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-correlation-rules-specification.md)),
 which could group these records by time. Those correlations count or co-locate
-events. They do not parse a host name out of a field. I did not run Chainsaw or
-Hayabusa for this write-up, so I make no claim about their exact output.
+events. They do not parse a host name out of a field.
+
+In practice it is starker. I later ran Hayabusa 4.1.0 and Chainsaw 2.16.5 on this file
+with the rules they ship ([benchmark](../BENCHMARK.md#cases)). Neither raises that rule.
+Hayabusa reports two informational *NetShare File Access* alerts for the `blabla.exe`
+records, and Chainsaw reports nothing. The rule's `ShareName` value escapes a literal `*`.
+In a copy where that one line reads `ShareName|endswith: 'IPC$'`, both engines fire on
+records 20 to 22.
 
 crabwalk's CW-012 produces one finding with the records attached, the source address
 *and* name, and a severity that reflects the corroboration; the CW-005 match on the

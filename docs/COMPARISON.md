@@ -2,8 +2,10 @@
 
 This page places crabwalk among open-source tools for analysing Windows event logs,
 plus Timeline Explorer, a free viewer whose licence is not verified.
-It compares documented capabilities only. No head-to-head benchmark was run, and
-"not verified" means the tool's own docs or source did not settle the question.
+It compares documented capabilities. For a measured comparison, crabwalk, Hayabusa 4.1.0 and
+Chainsaw 2.16.5 were also run on the same 47 lateral-movement recordings; see
+[BENCHMARK.md](BENCHMARK.md). In the tables below, "not verified" means the tool's own docs
+or source did not settle the question.
 Facts about other tools were checked against their READMEs, docs and source on
 2026-10-08 and are footnoted. Facts about crabwalk refer to this repository at
 version 0.1.0.

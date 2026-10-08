@@ -48,6 +48,13 @@ multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`, told as a [story](#the
 - **[Detection reference](docs/DETECTIONS.md)** — every rule's data sources,
   logic, severity, tunables, an allowlist example, false positives, blind spots
   and the tests that prove it.
+- **[Benchmark](docs/BENCHMARK.md)** — crabwalk, Hayabusa 4.1.0 and Chainsaw
+  2.16.5 run on the same 47 lateral-movement recordings, the corpus crabwalk's
+  rules were validated on. The rule engines flag more files at medium or above
+  (29 and 27 against 16). crabwalk flags the most with an alert tagged as
+  lateral movement (10 against 8 and 6), and is the only one to alert on four
+  target-side Security logs and one WinRM log, with 34 alerts at medium or
+  above against 130 and 110.
 - **[How crabwalk compares](docs/COMPARISON.md)** — Chainsaw, Hayabusa,
   Zircolite, LogonTracer, DeepBlueCLI, APT-Hunter and EvtxECmd: what each one
   does, and when to use which.
@@ -98,6 +105,8 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
       comparison with other tools, and Sigma translations of the CW-012 signals
 - [x] **Step 14** — Attack story (`--story`, report, live demo): the graph and the
       findings told as dated steps; one event, one finding (cross-rule merging)
+- [x] **Step 15** — Benchmark against Hayabusa and Chainsaw on the same
+      recordings (`scripts/benchmark.py`, [results](docs/BENCHMARK.md))
 
 ## Quickstart
 
@@ -338,7 +347,8 @@ cannot tell a trojaned `ccmsetup.exe` from the real one, so keep `users` and
   [LogonTracer](https://github.com/JPCERTCC/LogonTracer) graphs accounts to hosts
   in Neo4j. crabwalk is narrower: stateful, cross-host correlation of lateral
   movement into a host-to-host path, meant to run alongside a Sigma engine.
-  [COMPARISON.md](docs/COMPARISON.md) has the details and sources.
+  [COMPARISON.md](docs/COMPARISON.md) has the details and sources;
+  [BENCHMARK.md](docs/BENCHMARK.md) measures all three on the same recordings.
 
 ## ATT&CK coverage
 
