@@ -1,8 +1,18 @@
 """Catalog of event IDs that matter for lateral movement hunting.
 
 Keys are (channel, event_id). Anything outside this catalog is treated as
-noise unless the user asks for everything (--all).
+noise unless the user asks for everything (--all). A few high-volume IDs are
+only worth keeping for specific content; CONTENT_FILTERS narrows those.
 """
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import NormalizedEvent
 
 SECURITY = "Security"
 SYSTEM = "System"
@@ -75,11 +85,40 @@ CATALOG: dict[tuple[str, int], str] = {
     # --- Sysmon (optional enrichment when present) ---
     (SYSMON, 1): "Sysmon: process created",
     (SYSMON, 3): "Sysmon: network connection",
+    (SYSMON, 13): "Sysmon: service ImagePath set",  # narrowed by CONTENT_FILTERS
+    (SYSMON, 17): "Sysmon: named pipe created",
+    (SYSMON, 18): "Sysmon: named pipe connected",
+}
+
+# HKLM\System\CurrentControlSet\Services\<name>\ImagePath (or ControlSet00N):
+# the registry footprint of a service install, visible to Sysmon without 7045.
+SERVICE_IMAGE_PATH = re.compile(
+    r"\\(?:currentcontrolset|controlset\d{3})\\services\\[^\\]+\\imagepath$", re.IGNORECASE
+)
+
+
+def _is_service_image_path(event: NormalizedEvent) -> bool:
+    return bool(SERVICE_IMAGE_PATH.search(str(event.get("TargetObject") or "")))
+
+
+#: Catalog entries that are only kept when the payload matches. Sysmon 13 fires
+#: for every registry write on a busy host; only service installs matter here.
+CONTENT_FILTERS: dict[tuple[str, int], Callable[[NormalizedEvent], bool]] = {
+    (SYSMON, 13): _is_service_image_path,
 }
 
 
 def is_interesting(channel: str, event_id: int) -> bool:
     return (channel, event_id) in CATALOG
+
+
+def keep_event(event: NormalizedEvent) -> bool:
+    """Catalog membership plus any content filter registered for the ID."""
+    key = (event.channel, event.event_id)
+    if key not in CATALOG:
+        return False
+    content_filter = CONTENT_FILTERS.get(key)
+    return content_filter is None or content_filter(event)
 
 
 def describe(channel: str, event_id: int) -> str | None:

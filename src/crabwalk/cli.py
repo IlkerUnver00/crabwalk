@@ -94,6 +94,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+
 def _cmd_parse(args: argparse.Namespace) -> int:
     stats = ParseStats()
     try:
@@ -118,7 +119,8 @@ def _cmd_parse(args: argparse.Namespace) -> int:
                 fh.write(event.to_json() + "\n")
 
     _print_summary(events, stats, out_path=args.out)
-    return 0
+    _print_errors(stats)
+    return _exit_code(stats)
 
 
 def _cmd_sessions(args: argparse.Namespace) -> int:
@@ -138,8 +140,7 @@ def _cmd_sessions(args: argparse.Namespace) -> int:
 
     remote = result.remote_sessions()
     priv_remote = result.privileged_remote_sessions()
-    print(f"files      : {stats.files}")
-    print(f"records    : {stats.records}  (kept: {stats.kept}, unparsable: {stats.skipped})")
+    _print_parse_stats(stats)
     print(
         f"sessions   : {len(result.sessions)} total"
         f" | {len(remote)} remote | {len(priv_remote)} privileged+remote"
@@ -165,7 +166,8 @@ def _cmd_sessions(args: argparse.Namespace) -> int:
             )
     if args.out:
         print(f"\nwrote {len(result.sessions)} sessions, {len(result.edges)} edges -> {args.out}")
-    return 0
+    _print_errors(stats)
+    return _exit_code(stats)
 
 
 def _cmd_hunt(args: argparse.Namespace) -> int:
@@ -186,8 +188,7 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         args.report.write_text(html, encoding="utf-8")
 
     by_severity = Counter(f.severity for f in findings)
-    print(f"files      : {stats.files}")
-    print(f"records    : {stats.records}  (kept: {stats.kept}, unparsable: {stats.skipped})")
+    _print_parse_stats(stats)
     print(
         f"sessions   : {len(ctx.tracking.sessions)}"
         f" | edges: {len(ctx.tracking.edges)}"
@@ -210,17 +211,48 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         technique_counts = Counter(t for f in findings for t in f.techniques)
         for technique_id, count in sorted(technique_counts.items()):
             print(f"{technique_id:<10} {technique_name(technique_id):<60} {count:>4}")
-    for label, path in (("findings", args.out), ("layer", args.layer), ("report", args.report)):
+    outputs = (("findings", args.out), ("layer", args.layer), ("report", args.report))
+    for label, path in outputs:
         if path:
             print(f"wrote {label} -> {path}")
-    return 0
+    _print_errors(stats)
+    return _exit_code(stats)
+
+
+def _print_parse_stats(stats: ParseStats) -> None:
+    damage = [f"unreadable: {stats.file_errors}"] if stats.file_errors else []
+    damage += [f"damaged: {stats.damaged_files}"] if stats.damaged_files else []
+    print(f"files      : {stats.files}" + (f"  ({', '.join(damage)})" if damage else ""))
+    unreadable = f", unreadable chunks: {stats.read_errors}" if stats.read_errors else ""
+    print(f"records    : {stats.records}  (kept: {stats.kept}, unparsable: {stats.skipped}{unreadable})")
+
+
+def _print_errors(stats: ParseStats) -> None:
+    if stats.file_problems:
+        print(f"\ndamaged or unreadable files ({len(stats.file_problems)}):", file=sys.stderr)
+        for line in stats.file_problems:
+            print(f"  {line}", file=sys.stderr)
+    if stats.errors:
+        print(f"\nread/decode problems (first {len(stats.errors)} shown):", file=sys.stderr)
+        for line in stats.errors:
+            print(f"  {line}", file=sys.stderr)
+
+
+def _exit_code(stats: ParseStats) -> int:
+    """1 when there was damage and not one record could be decoded, else 0.
+
+    Partial damage is normal in triage and does not fail the run; decoding
+    nothing usually means a wrong path, a non-EVTX input or a wrecked file. A
+    clean but empty input (no .evtx files, or empty logs) is not a failure.
+    """
+    damaged = stats.file_errors or stats.read_errors or stats.skipped
+    return 1 if damaged and stats.decoded == 0 else 0
 
 
 def _print_summary(
     events: list[NormalizedEvent], stats: ParseStats, *, out_path: Path | None
 ) -> None:
-    print(f"files      : {stats.files}")
-    print(f"records    : {stats.records}  (kept: {stats.kept}, unparsable: {stats.skipped})")
+    _print_parse_stats(stats)
     if events:
         first, last = events[0].timestamp, events[-1].timestamp
         print(f"time range : {first:%Y-%m-%d %H:%M:%S}Z .. {last:%Y-%m-%d %H:%M:%S}Z")
@@ -234,10 +266,6 @@ def _print_summary(
             print(f"{channel:<{width}}  {event_id:>6}  {count:>8}  {label}")
     if out_path:
         print(f"\nwrote {len(events)} events -> {out_path}")
-    if stats.errors:
-        print(f"\nfirst unparsable records ({len(stats.errors)} shown):", file=sys.stderr)
-        for line in stats.errors:
-            print(f"  {line}", file=sys.stderr)
 
 
 if __name__ == "__main__":

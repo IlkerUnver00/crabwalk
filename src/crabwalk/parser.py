@@ -1,7 +1,9 @@
 """EVTX parsing: turns raw .evtx files into a stream of NormalizedEvent objects.
 
-Uses pyevtx-rs (the ``evtx`` package, Rust-backed) for speed. Records that
-fail to decode are counted, never fatal — forensic inputs are routinely dirty.
+Uses pyevtx-rs (the ``evtx`` package, Rust-backed) for speed. Nothing about a
+single input is fatal — forensic inputs are routinely dirty: a file that cannot
+be opened (bad header, zero bytes, locked, not EVTX at all) is reported and
+skipped, and so is a record that cannot be read or decoded.
 """
 
 from __future__ import annotations
@@ -15,25 +17,63 @@ from typing import Any
 
 from evtx import PyEvtxParser
 
-from .catalog import is_interesting
+from .catalog import keep_event
 from .models import NormalizedEvent
 
+EVTX_HEADER = 4096
+EVTX_CHUNK = 65536
+#: Read failures tolerated per file beyond one per chunk. pyevtx-rs raises once
+#: per damaged chunk and then moves on, so a reader that fails more often than
+#: the file has chunks is no longer advancing and is abandoned.
+READ_ERROR_SLACK = 16
 
 
 @dataclass
 class ParseStats:
     files: int = 0
-    records: int = 0
+    records: int = 0  # records the reader produced
     kept: int = 0
-    skipped: int = 0
-    errors: list[str] = field(default_factory=list)
+    skipped: int = 0  # produced but could not be decoded
+    read_errors: int = 0  # damaged chunks/records the reader could not produce
+    file_errors: int = 0  # files that yielded nothing at all
+    damaged_files: int = 0  # files read only in part
+    errors: list[str] = field(default_factory=list)  # record-level, capped
+    file_problems: list[str] = field(default_factory=list)  # one per file, never capped
 
     _MAX_ERRORS = 20
 
+    @property
+    def decoded(self) -> int:
+        return self.records - self.skipped
+
     def note_error(self, message: str) -> None:
         self.skipped += 1
+        self._remember(message)
+
+    def note_read_error(self, message: str) -> None:
+        self.read_errors += 1
+        self._remember(message)
+
+    def note_file_error(self, message: str) -> None:
+        self.file_errors += 1
+        self.file_problems.append(message)
+
+    def note_damaged_file(self, message: str) -> None:
+        self.damaged_files += 1
+        self.file_problems.append(message)
+
+    def _remember(self, message: str) -> None:
         if len(self.errors) < self._MAX_ERRORS:
             self.errors.append(message)
+
+
+def read_error_budget(file: Path) -> int:
+    """How many read failures a file may produce before the reader is stuck."""
+    try:
+        size = file.stat().st_size
+    except OSError:
+        size = 0
+    return max(0, size - EVTX_HEADER) // EVTX_CHUNK + 1 + READ_ERROR_SLACK
 
 
 def expand_paths(paths: Iterable[str | Path]) -> list[Path]:
@@ -67,8 +107,7 @@ def iter_events(
     stats = stats if stats is not None else ParseStats()
     for file in expand_paths(paths):
         stats.files += 1
-        parser = PyEvtxParser(str(file))
-        for record in parser.records_json():
+        for record in _read_records(file, stats):
             stats.records += 1
             try:
                 event = parse_record(record, source_file=str(file))
@@ -79,6 +118,47 @@ def iter_events(
                 continue
             stats.kept += 1
             yield event
+
+
+def _read_records(file: Path, stats: ParseStats) -> Iterator[dict[str, Any]]:
+    """Yield the raw records of one file; damage is reported, never raised.
+
+    Opening fails on a bad header, an empty or locked file, or a non-EVTX file.
+    Reading fails per damaged chunk (occasionally per record) inside an
+    otherwise valid file; pyevtx-rs then continues with the next chunk, so we
+    keep reading — good chunks after a damaged span are evidence too. Only a
+    reader that fails more often than the file has chunks is given up on.
+    """
+    try:
+        records = PyEvtxParser(str(file)).records_json()
+    except Exception as exc:
+        stats.note_file_error(f"{file.name}: cannot open: {exc}")
+        return
+    budget = read_error_budget(file)
+    produced = failures = 0
+    abandoned = False
+    while True:
+        try:
+            record = next(records)
+        except StopIteration:
+            break
+        except Exception as exc:
+            failures += 1
+            stats.note_read_error(f"{file.name}: unreadable chunk/record: {exc}")
+            if failures > budget:
+                abandoned = True
+                break
+            continue
+        produced += 1
+        yield record
+    if not failures:
+        return
+    if produced == 0:
+        stats.note_file_error(f"{file.name}: opened, but no record could be read "
+                              f"({failures} read failures)")
+    else:
+        verdict = "abandoned after" if abandoned else "partially read,"
+        stats.note_damaged_file(f"{file.name}: {verdict} {failures} unreadable chunks/records")
 
 
 def _selected(
@@ -94,7 +174,7 @@ def _selected(
         return False
     if keep_all or event_ids or channels:
         return True
-    return is_interesting(event.channel, event.event_id)
+    return keep_event(event)
 
 
 def dedup_events(events: Iterable[NormalizedEvent]) -> list[NormalizedEvent]:

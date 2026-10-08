@@ -127,6 +127,27 @@ def test_dedup_events_drops_same_record_from_overlapping_exports():
     assert {e.record_id for e in out} == {5, 6}
 
 
+@pytest.mark.parametrize(
+    "target, kept",
+    [
+        (r"HKLM\System\CurrentControlSet\services\hello\ImagePath", True),
+        (r"HKLM\SYSTEM\ControlSet001\Services\PSEXESVC\ImagePath", True),
+        (r"HKLM\System\CurrentControlSet\services\hello\Start", False),
+        (r"HKU\S-1-5-21-1\Software\Microsoft\Windows\CurrentVersion\Run\x", False),
+    ],
+)
+def test_sysmon_13_kept_only_for_service_image_path(target, kept):
+    from crabwalk.catalog import SYSMON, keep_event
+    from crabwalk.models import NormalizedEvent
+
+    event = NormalizedEvent(
+        timestamp=datetime(2026, 8, 1, tzinfo=timezone.utc), channel=SYSMON,
+        provider="p", event_id=13, record_id=1, computer="WS01",
+        data={"TargetObject": target}, source_file="s.evtx",
+    )
+    assert keep_event(event) is kept
+
+
 def test_scalar_unwraps_text_nodes():
     assert scalar({"#text": 5}) == 5
     assert scalar("plain") == "plain"
