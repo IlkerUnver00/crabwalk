@@ -74,6 +74,24 @@ def is_machine_account(account: object) -> bool:
     return account_name(account).endswith("$")
 
 
+ANONYMOUS_SID = "S-1-5-7"
+
+
+def is_anonymous(account: object, sid: object = None) -> bool:
+    """ANONYMOUS LOGON (S-1-5-7): a null SMB/RPC session, not a person.
+
+    The SID decides whenever the record has one: the account name is
+    localized when the event is logged ('NT-AUTORITÄT\\ANONYMOUS-ANMELDUNG'),
+    and an account someone named 'anonymous1' has a real SID. Without a SID
+    only the exact English name counts, so a real 'anonymous.svc' account
+    seen in a SID-less record (TS-LSM) is never exempted.
+    """
+    sid = str(sid or "").strip().upper()
+    if sid.startswith("S-1-"):
+        return sid == ANONYMOUS_SID
+    return account_name(account).strip().upper() == "ANONYMOUS LOGON"
+
+
 def short_host(name: object) -> str | None:
     """'\\\\WIN-1.corp.local$' -> 'win-1'; IPs and placeholders -> None."""
     text = str(name or "").strip().lstrip("\\").rstrip("$").strip().lower()

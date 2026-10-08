@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from ..catalog import SECURITY
-from ..hosts import is_machine_account, remote_ip
+from ..hosts import is_anonymous, is_machine_account, remote_ip
 from ..sessions import display_user
 from .base import Finding, HuntContext, Rule
 
@@ -73,7 +73,8 @@ class DCSync(Rule):
             subject = str(event.get("SubjectUserName") or "")
             # Domain controllers replicate legitimately; they authenticate as
             # machine accounts ($). Anything else asking to replicate is a DCSync.
-            if is_machine_account(subject) or subject.upper() in ("", "ANONYMOUS LOGON"):
+            if (not subject or is_machine_account(subject)
+                    or is_anonymous(subject, event.get("SubjectUserSid"))):
                 continue
             user = display_user(event.get("SubjectDomainName"), subject)
             key = (event.computer, user)

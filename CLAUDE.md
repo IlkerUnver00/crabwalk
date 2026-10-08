@@ -38,6 +38,24 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   `crabwalk config --example` picks it up automatically (a test enforces it). Read
   tunables from `self`, never from module constants. Allowlist suppresses findings
   AFTER the rules run; suppressed ones must stay visible (CLI count, JSON, report).
+  `fields` = one table (`[allow.fields]`) or several (`[[allow.fields]]`); EVERY
+  evidence event must fully match one table (carry all its fields, all regexes hold).
+  That fails closed on typos/foreign fields. Each table must name one of
+  config.IDENTIFYING_FIELDS (an allowlist: ServiceName, ImagePath, RelativeTargetName,
+  PipeName, TaskContent, CommandLine, ScriptBlockText...); anything else (who/where,
+  Image, per-type constants like AccountName/ObjectType) may only narrow. Empty tables
+  and any-value regexes (probed against _PROBES) are refused at load. Near misses warn
+  (screen() gets ctx.events for the typo check). A rule that adds an event type to its
+  `evidence` changes what entries must describe — if that type needs a new identifying
+  field, add it to IDENTIFYING_FIELDS (CW-001 keeps the install only, its logon is
+  users/sources; CW-002's hop records are who/where only).
+- Anonymous logons: `hosts.is_anonymous(name, sid)` — the SID (S-1-5-7) decides; the
+  name is localized, so it is only the fallback for records without a SID.
+- Docs: docs/DETECTIONS.md = per-rule reference (pins a commit and test counts) —
+  update it with any change to a rule's logic, tunables, evidence or validation.
+  docs/writeups/ (case write-ups on demo/evtx data), docs/COMPARISON.md (sourced claims
+  about other tools), sigma/ (pySigma-validated, not loaded by crabwalk). demo/ = nine
+  GPL-3.0 corpus files; tests/test_demo.py pins their results and always runs in CI.
 - Machine accounts: always `hosts.is_machine_account()` (handles `DOM\PC$`,
   `PC$@REALM`); never `endswith("$")` inline.
 - Test data: `samples\EVTX-ATTACK-SAMPLES` (sbousseaden repo, shallow clone, gitignored);

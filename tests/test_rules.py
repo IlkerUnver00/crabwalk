@@ -1,6 +1,8 @@
 import itertools
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from crabwalk.catalog import POWERSHELL, SECURITY, SYSMON, SYSTEM, TS_LSM, WINRM
 from crabwalk.models import NormalizedEvent
 from crabwalk.rules import HuntContext, hunt, run_rules
@@ -154,6 +156,73 @@ def test_rdp_chain_across_three_hosts():
     assert finding.host == "HOSTC"
     assert "RDP chain" in finding.summary
     assert "HOSTB" in finding.summary
+    assert finding.evidence == [hop1, hop2]  # both hops cite their records
+
+
+def test_rdp_chain_is_reported_once_when_both_logs_record_the_first_hop():
+    # HOSTB logs the same inbound session in Security (4624 LT10, with the
+    # workstation name) and in TS-LSM (21, address only): still one chain.
+    b_4624 = remote_logon(computer="HOSTB", user="bob", logon_id="0x10", LogonType="10",
+                          IpAddress="10.1.1.1", WorkstationName="WSX")
+    b_21 = ev(21, channel=TS_LSM, computer="HOSTB", minutes=1 / 60, User="CORP\\bob",
+              Address="10.1.1.1")
+    c_4624 = remote_logon(computer="HOSTC", minutes=45, user="bob", logon_id="0x77",
+                          LogonType="10", IpAddress="10.2.2.2", WorkstationName="HOSTB")
+    (finding,) = by_rule(findings_for(b_4624, b_21, c_4624), "CW-002")
+    assert finding.evidence == [b_4624, c_4624]  # the earlier record of the first hop
+
+
+@pytest.mark.parametrize("b_user, c_user", [
+    ("CORP.LOCAL\\bob", "CORP\\bob"),  # 4624 domain in DNS form
+    ("bob@corp.local", "corp\\BOB"),  # UPN, and another case on the second hop
+])
+def test_rdp_chain_is_told_once_whatever_notation_each_log_uses(b_user, c_user):
+    b_4624 = remote_logon(computer="HOSTB", user="bob", logon_id="0x10", LogonType="10",
+                          IpAddress="10.1.1.1", WorkstationName="WSX")
+    b_21 = ev(21, channel=TS_LSM, computer="HOSTB", minutes=1 / 60, User=b_user, Address="10.1.1.1")
+    c_4624 = remote_logon(computer="HOSTC", minutes=45, user="bob", logon_id="0x77",
+                          LogonType="10", IpAddress="10.2.2.2", WorkstationName="HOSTB")
+    c_21 = ev(21, channel=TS_LSM, computer="HOSTC", minutes=45 + 1 / 60, User=c_user,
+              Address="10.2.2.2")
+    assert len(by_rule(findings_for(b_4624, b_21, c_4624, c_21), "CW-002")) == 1
+
+
+def test_rdp_chains_from_clients_that_share_a_workstation_name_stay_apart():
+    # The RDP client chooses the name it reports (xfreerdp /client-hostname:),
+    # so two machines claiming ADMIN-PC must not merge into one chain.
+    admin = remote_logon(computer="HOSTB", user="admin", logon_id="0x10", LogonType="10",
+                         IpAddress="10.1.1.1", WorkstationName="ADMIN-PC")
+    eve = remote_logon(computer="HOSTB", minutes=60, user="eve", logon_id="0x11", LogonType="10",
+                       IpAddress="10.6.6.6", WorkstationName="ADMIN-PC")
+    onward = remote_logon(computer="HOSTC", minutes=120, user="bob", logon_id="0x77",
+                          LogonType="10", IpAddress="10.2.2.2", WorkstationName="HOSTB")
+    chains = by_rule(findings_for(admin, eve, onward), "CW-002")
+    assert sorted(f.evidence[0].data["IpAddress"] for f in chains) == ["10.1.1.1", "10.6.6.6"]
+
+
+@pytest.mark.parametrize("name, domain", [
+    ("ANONYMOUS LOGON", "NT AUTHORITY"),
+    ("ANONYMOUS-ANMELDUNG", "NT-AUTORITÄT"),  # names are localized when logged; the SID is not
+])
+def test_anonymous_logon_does_not_take_the_blame_for_an_install(name, domain):
+    anonymous = remote_logon(user=name, TargetDomainName=domain, TargetUserSid="S-1-5-7",
+                             AuthenticationPackageName="NTLM")
+    install = ev(7045, channel=SYSTEM, minutes=2, ServiceName="Svc", ImagePath=r"C:\x.exe")
+    assert by_rule(findings_for(anonymous, install), "CW-001") == []
+    # A real account's logon just before still correlates, even with null sessions after it.
+    (finding,) = by_rule(findings_for(remote_logon(logon_id="0x51"), anonymous, install), "CW-001")
+    assert finding.user == "CORP\\admin"
+
+
+def test_an_account_merely_named_anonymous_is_not_exempt():
+    install = ev(7045, channel=SYSTEM, minutes=2, ServiceName="Svc", ImagePath=r"C:\x.exe")
+    impostor = remote_logon(user="anonymous1", TargetUserSid="S-1-5-21-1-2-3-1104")
+    (finding,) = by_rule(findings_for(impostor, install), "CW-001")
+    assert finding.user == "CORP\\anonymous1"
+    # TS-LSM records carry no SID: only the exact built-in name may count there.
+    rdp = ev(21, channel=TS_LSM, User="CORP\\anonymous.svc", Address="10.1.1.1")
+    (finding,) = by_rule(findings_for(rdp, install), "CW-001")
+    assert finding.user == "CORP\\anonymous.svc"
 
 
 def test_pth_seclogo_logon_type_9():

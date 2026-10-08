@@ -15,24 +15,29 @@ without touching code::
 
     [[allow]]
     reason = "SCCM client push"   # required: every suppression says why
-    rules = ["CW-001", "CW-012"]  # optional, default all rules
+    rules = ["CW-001"]            # optional, default all rules
     users = ["CORP\\\\svc_sccm"]     # globs; a bare name matches any domain
     sources = ["10.0.5.0/24"]     # client IP/CIDR, or source host glob
     expires = 2026-12-31          # optional: allowlists rot
-    [allow.fields]                # optional regexes on the evidence events
-    ServiceName = "^ccmsetup$"
+    [[allow.fields]]              # optional: one table per kind of evidence record
+    ServiceName = "^ccmsetup$"    #   the install: its name AND its binary
+    ImagePath = '^"?C:\\\\Windows\\\\ccmsetup\\\\ccmsetup\\.exe"?( |$)'
 
 Within an [[allow]] entry every given criterion must match; within a list any
 item may. An entry needs at least one criterion — a blanket suppression is
-what ``disable`` is for. A field regex must hold for every evidence event that
-carries the field, so one benign event cannot excuse the rest of a finding.
-A domain-qualified user pattern only matches records that show that domain.
+what ``disable`` is for. With fields, EVERY evidence event of a finding must
+match one of the entry's field tables: carry all of that table's fields, each
+matching its regex. One benign event cannot excuse the rest of a finding, an
+entry cannot excuse evidence it says nothing about (the service install that
+escalated a pipe finding), and a misspelled or misplaced field name makes its
+table match nothing, so the entry fails closed. `hunt` warns about both near
+misses. A domain-qualified user pattern only matches records that show that
+domain.
 
 Unknown keys, rule ids, CIDRs and regexes are errors, not silently ignored: a
 typo in a suppression list must never pass quietly, and a CIDR is never
 widened (10.0.5.0/2 is refused, not read as 0.0.0.0/2). Suppressed findings
-are kept and reported with their reason; field names that never occur in the
-evidence they are meant to match are reported as likely typos.
+are kept and reported with their reason.
 """
 
 from __future__ import annotations
@@ -54,6 +59,7 @@ else:  # pragma: no cover - exercised on the 3.10 CI leg
     import tomli as tomllib
 
 from .hosts import clean_ip, short_host
+from .models import NormalizedEvent
 from .rules import ALL_RULES
 from .rules.base import SEVERITY_RANK, Finding, Rule
 
@@ -75,6 +81,35 @@ class ConfigError(ValueError):
 # --------------------------------------------------------------------------
 
 Network = ipaddress.IPv4Network | ipaddress.IPv6Network
+#: One [allow.fields] table: (field name as written, regex) pairs that a single
+#: evidence event must all satisfy. Names compare case-insensitively.
+FieldTable = tuple[tuple[str, re.Pattern[str]], ...]
+VOUCHED, CONTRADICTED, SILENT = "vouched", "contradicted", "silent"
+
+#: Fields that say what a record is: the service and its binary, the share
+#: object or pipe, the registry value, the task and what it runs, the process
+#: and its command line, the script, the directory object, the cleared log.
+#: Every [allow.fields] table must name at least one. Everything else (who,
+#: where, process context, per-type constants such as ObjectType or
+#: AccountName=LocalSystem) appears on many kinds of record, so a table of
+#: those alone would vouch for records it never meant, such as the install
+#: that escalated a finding. An allowlist rather than a denylist, so a field
+#: nobody thought about fails closed. `users`, `hosts` and `sources` cover
+#: who and where.
+IDENTIFYING_FIELDS = (
+    "ServiceName", "ImagePath", "ServiceFileName",          # 7045, 4697 (and 4769)
+    "RelativeTargetName", "PipeName",                       # 5145, Sysmon 17/18
+    "TargetObject", "Details",                              # Sysmon 13
+    "TaskName", "TaskContent", "TaskContentNew",            # 4698, 4702
+    "CommandLine", "NewProcessName", "Hashes", "OriginalFileName",  # Sysmon 1, 4688
+    "ScriptBlockText",                                      # 4104
+    "Properties", "ObjectName",                             # 4662
+    "Channel", "BackupPath",                                # System 104
+)
+_IDENTIFYING = frozenset(name.lower() for name in IDENTIFYING_FIELDS)
+#: A regex that matches all of these constrains nothing a real record would show.
+_PROBES = ("x", "0", "-", "C:\\Windows\\Temp\\x.exe", "%COMSPEC% /Q /c whoami", "\\svcctl",
+           "PSEXESVC-WKS66-4242-stdin", "crabwalk probe 7f3a9c \u2603", "A" * 300)
 
 
 @dataclass(frozen=True)
@@ -86,7 +121,7 @@ class AllowEntry:
     hosts: tuple[str, ...] = ()
     networks: tuple[Network, ...] = ()
     source_hosts: tuple[str, ...] = ()
-    fields: tuple[tuple[str, re.Pattern[str]], ...] = ()
+    fields: tuple[FieldTable, ...] = ()  # each table describes one kind of evidence event
     expires: date | None = None
 
     @property
@@ -112,20 +147,57 @@ class AllowEntry:
         return True
 
     def matches_fields(self, finding: Finding) -> bool:
-        """Each field regex must hold for EVERY evidence event that carries the
-        field, and at least one must carry it. One benign event (an svcctl
-        open) must not excuse a finding whose other evidence is a PsExec run."""
-        for name, pattern in self.fields:
-            values = [value for event in finding.evidence
-                      for key, value in event.data.items() if key.lower() == name]
-            if not values or not all(pattern.search(str(value)) for value in values):
-                return False
-        return True
+        """The entry has to vouch for every evidence event, one by one: each
+        must match one of the field tables (carry all of its fields, each
+        matching its regex).
 
-    def missing_fields(self, finding: Finding) -> set[str]:
-        """Field names no evidence event of the finding carries at all."""
-        present = {key.lower() for event in finding.evidence for key in event.data}
-        return {name for name, _ in self.fields} - present
+        * One benign event (an svcctl open) cannot excuse a finding whose
+          other evidence is a PsExec run: those opens match no table.
+        * An entry written for svcctl polling cannot excuse the service
+          install that escalated the same cluster: no table describes it.
+        * A misspelled field, or one that belongs to another event type,
+          makes its table match nothing, so the entry fails closed.
+        * Generic fields (SubjectUserName, User, AccountName) only narrow a
+          table that also names one of IDENTIFYING_FIELDS; a table without
+          one is refused when the config is read.
+
+        Separate tables describe separate kinds of evidence, so one entry
+        can cover a tool's 5145 opens, Sysmon pipe events and install across
+        rules. A finding without evidence never matches a fields entry.
+        """
+        if not self.fields:
+            return True
+        return bool(finding.evidence) and all(
+            self.event_status(event) == VOUCHED for event in finding.evidence)
+
+    def event_status(self, event: NormalizedEvent) -> str:
+        """VOUCHED: a table matches the event. CONTRADICTED: the event carries
+        every field of some table, but a regex fails, so the entry describes
+        something else. SILENT: no table names only fields the event carries;
+        the entry says nothing about it.
+
+        A field the record leaves null counts as absent, and when a record
+        repeats a name in another case every copy must match."""
+        values = _field_values(event)
+        status = SILENT
+        for table in self.fields:
+            if all(name.lower() in values for name, _ in table):
+                if all(pattern.search(value) for name, pattern in table
+                       for value in values[name.lower()]):
+                    return VOUCHED
+                status = CONTRADICTED
+        return status
+
+    def unseen_tables(self, shapes: set[frozenset[str]]) -> list[FieldTable]:
+        """Tables whose fields no record of these shapes carries together and
+        that look like a mistake. A lone identifying field that no record
+        carries is just a log source the data lacks (a misspelled one would
+        have been refused at load, since its table then names no identifying
+        field); a misspelled narrowing field, or fields of different records
+        put in one table, is the mistake worth a warning."""
+        return [table for table in self.fields
+                if not (len(table) == 1 and table[0][0].lower() in _IDENTIFYING)
+                and not any(all(name.lower() in shape for name, _ in table) for shape in shapes)]
 
     def _source_matches(self, finding: Finding) -> bool:
         ip = clean_ip(finding.src_ip)  # session-layer addresses may be ::ffff:-mapped
@@ -270,7 +342,14 @@ class Config:
             rules.append(rule)
         return rules
 
-    def screen(self, findings: list[Finding], today: date | None = None) -> Screened:
+    def screen(
+        self, findings: list[Finding], today: date | None = None,
+        events: list[NormalizedEvent] | None = None,
+    ) -> Screened:
+        """Apply the allowlist and the severity floor. ``events`` (every
+        parsed record) lets the typo check tell a field no record carries
+        from one this rule's evidence just does not; without it, only the
+        findings' evidence is consulted."""
         today = today or date.today()
         active = [entry for entry in self.allow if not entry.expired(today)]
         kept: list[Finding] = []
@@ -285,7 +364,12 @@ class Config:
             else:
                 kept.append(finding)
         expired = [entry for entry in self.allow if entry.expired(today)]
-        return Screened(kept, suppressed, below, expired, _field_warnings(active, findings))
+        done = {id(finding) for finding, _ in suppressed}
+        records = events if events is not None else [e for f in findings for e in f.evidence]
+        shapes = {frozenset(_field_values(event)) for event in records}
+        warnings = (_unseen_table_warnings(active, findings, done, shapes)
+                    + _near_miss_warnings(active, kept, shapes))
+        return Screened(kept, suppressed, below, expired, warnings)
 
     def describe(self) -> dict[str, Any]:
         """Effective settings, recorded next to the findings they produced."""
@@ -301,21 +385,89 @@ class Config:
         }
 
 
-def _field_warnings(entries: list[AllowEntry], findings: list[Finding]) -> list[str]:
-    """Flag field names that are probably typos: the entry's other criteria
-    match some findings, yet none of their evidence carries the field."""
+def _unseen_table_warnings(
+    entries: list[AllowEntry], findings: list[Finding], suppressed: set[int],
+    shapes: set[frozenset[str]],
+) -> list[str]:
+    """Flag the likely typo behind an entry that passed a finding by without
+    a word: its other criteria hold, yet its tables say nothing about any of
+    the finding's evidence, and one of them names fields that no record in
+    the data carries together. An entry that vouched for part of the
+    evidence, or contradicted it, evidently applies; a table for another
+    rule or log source is not flagged then."""
     warnings = []
     for entry in entries:
         if not entry.fields:
             continue
         in_scope = [f for f in findings if entry.matches_scope(f)]
-        if not in_scope:
+        ignored = [f for f in in_scope if id(f) not in suppressed and f.evidence
+                   and all(entry.event_status(e) == SILENT for e in f.evidence)]
+        if not ignored:
             continue
-        never = set.intersection(*(entry.missing_fields(f) for f in in_scope))
-        for name in sorted(never):
-            warnings.append(f"{entry.label}: field {name!r} appears in no evidence of the "
-                            f"{len(in_scope)} finding(s) it otherwise matches; check the name")
+        for table in entry.unseen_tables(shapes):
+            names = ", ".join(repr(name) for name, _ in table)
+            if len(table) == 1:
+                what, hint = f"field {names} occurs in no record", "check the name"
+            else:
+                what = f"fields {names} never occur together in one record"
+                hint = ("check the names, and give fields of different records "
+                        "separate [[allow.fields]] tables")
+            warnings.append(f"{entry.label}: {what} of this data, and the entry said nothing about "
+                            f"{len(ignored)} finding(s) it otherwise matches; {hint} "
+                            "(or the data lacks that log source)")
     return warnings
+
+
+def _near_miss_warnings(
+    entries: list[AllowEntry], kept: list[Finding], shapes: set[frozenset[str]]
+) -> list[str]:
+    """Explain a near miss: an entry's criteria held and its tables vouched
+    for part of a finding's evidence without contradicting any of it, but
+    said nothing about the rest, so the finding was kept. Usually that rest
+    is what escalated it; sometimes the table meant for it has a typo, so a
+    table whose fields no record carries together is named as well. One line
+    per entry, rule and kind of evidence."""
+    groups: dict[tuple[int, str, str], list[Finding]] = {}
+    by_index = {entry.index: entry for entry in entries}
+    for finding in kept:
+        for entry in entries:
+            if not entry.fields or not entry.matches_scope(finding):
+                continue
+            status = [(event, entry.event_status(event)) for event in finding.evidence]
+            silent = [event for event, s in status if s == SILENT]
+            if not silent or len(silent) == len(status) or any(s == CONTRADICTED for _, s in status):
+                continue
+            kinds = ", ".join(sorted({f"{_channel_label(e.channel)} {e.event_id}" for e in silent}))
+            groups.setdefault((entry.index, finding.rule_id, kinds), []).append(finding)
+    warnings = []
+    for (index, rule_id, kinds), found in groups.items():
+        entry = by_index[index]
+        first = min(found, key=lambda f: f.timestamp)
+        message = (
+            f"{entry.label}: kept {len(found)} {rule_id} finding(s) (first on {first.host} at "
+            f"{first.timestamp:%Y-%m-%d %H:%M:%S}Z): no fields table describes their {kinds} "
+            "evidence; if that is expected too, add a table that pins what it is (name and path)")
+        for table in entry.unseen_tables(shapes):
+            names = ", ".join(repr(name) for name, _ in table)
+            message += (f"; note that no record of this data carries {names} together "
+                        "(a typo, fields of different records in one table, or a log source "
+                        "the data lacks?)")
+        warnings.append(message)
+    return warnings
+
+
+def _field_values(event: NormalizedEvent) -> dict[str, list[str]]:
+    """Lower-cased field name -> every non-null value the record has for it."""
+    values: dict[str, list[str]] = {}
+    for key, value in event.data.items():
+        if value is not None:
+            values.setdefault(str(key).lower(), []).append(str(value))
+    return values
+
+
+def _channel_label(channel: str) -> str:
+    """'Microsoft-Windows-Sysmon/Operational' -> 'Sysmon'."""
+    return channel.split("/", 1)[0].removeprefix("Microsoft-Windows-")
 
 
 def load_config(path: str | Path) -> Config:
@@ -463,18 +615,7 @@ def _allow_entry(raw: Any, index: int) -> AllowEntry:
             source_hosts.append(networks_or_host)
         else:
             networks.append(networks_or_host)
-    fields = []
-    raw_fields = raw.get("fields", {})
-    if not isinstance(raw_fields, dict):
-        raise ConfigError(f"{where}.fields: must be a table of field = \"regex\"")
-    for name, pattern in raw_fields.items():
-        if not isinstance(pattern, str):
-            raise ConfigError(f"{where}.fields.{name}: expected a regex string, got {pattern!r}")
-        try:
-            # names compare case-insensitively: 'servicename' must not quietly miss 'ServiceName'
-            fields.append((str(name).lower(), re.compile(pattern, re.IGNORECASE)))
-        except re.error as exc:
-            raise ConfigError(f"{where}.fields.{name}: invalid regex {pattern!r}: {exc}") from None
+    fields = _field_tables(raw["fields"], f"{where}.fields") if "fields" in raw else ()
     entry = AllowEntry(
         reason=reason.strip(),
         index=index,
@@ -485,13 +626,65 @@ def _allow_entry(raw: Any, index: int) -> AllowEntry:
                     for i, h in enumerate(_optional_list(raw, "hosts", where))),
         networks=tuple(networks),
         source_hosts=tuple(source_hosts),
-        fields=tuple(fields),
+        fields=fields,
         expires=_date(raw.get("expires"), f"{where}.expires"),
     )
     if not (entry.users or entry.hosts or entry.networks or entry.source_hosts or entry.fields):
         raise ConfigError(f"{where}: needs at least one of users, hosts, sources or fields; "
                           "to silence a rule entirely use rules.disable")
     return entry
+
+
+def _field_tables(raw: Any, where: str) -> tuple[FieldTable, ...]:
+    """`[allow.fields]` (one table) or `[[allow.fields]]` (one per kind of evidence).
+
+    A table must be able to say what a record is: one that is empty, that
+    names none of IDENTIFYING_FIELDS, or whose regex accepts any value would
+    vouch for records it never meant (the install that escalated a finding),
+    so it is refused here rather than discovered in an incident. A regex
+    that is merely broad cannot be detected; anchor whole values.
+    """
+    single = isinstance(raw, dict)
+    tables = [raw] if single else raw
+    usage = ('must be a table of field = "regex" ([allow.fields]), '
+             "or several such tables ([[allow.fields]])")
+    if not isinstance(tables, list) or not tables:
+        raise ConfigError(f"{where}: {usage}")
+    parsed: list[FieldTable] = []
+    for i, table in enumerate(tables):
+        at = where if single else f"{where}[{i}]"
+        if not isinstance(table, dict):
+            raise ConfigError(f"{at}: {usage}, got {table!r}")
+        if not table:
+            raise ConfigError(f"{at}: empty; an empty table would vouch for any record")
+        pairs = []
+        for name, pattern in table.items():
+            name = str(name).strip()
+            if not name:
+                raise ConfigError(f"{at}: empty field name")
+            if not isinstance(pattern, str):
+                raise ConfigError(f"{at}.{name}: expected a regex string, got {pattern!r}")
+            try:
+                # names compare case-insensitively: 'servicename' must not quietly miss 'ServiceName'
+                compiled = re.compile(pattern, re.IGNORECASE)
+            except re.error as exc:
+                raise ConfigError(f"{at}.{name}: invalid regex {pattern!r}: {exc}") from None
+            if all(compiled.search(probe) for probe in _PROBES):
+                raise ConfigError(f"{at}.{name}: regex {pattern!r} accepts any value; "
+                                  "pin what the field must be (anchor it with ^...$)")
+            pairs.append((name, compiled))
+        if not any(name.lower() in _IDENTIFYING for name, _ in pairs):
+            listed = ", ".join(name for name, _ in pairs)
+            raise ConfigError(
+                f"{at}: names no field that says what a record is ({listed}); fields like these "
+                "appear on many kinds of record, so the table would vouch for any of them, "
+                "including an install that escalated the finding. Name one of "
+                f"{', '.join(IDENTIFYING_FIELDS)} (check the spelling), and use users, hosts or "
+                "sources for who and where")
+        key = tuple(sorted((name.lower(), compiled.pattern) for name, compiled in pairs))
+        if key not in {tuple(sorted((n.lower(), p.pattern) for n, p in t)) for t in parsed}:
+            parsed.append(tuple(pairs))
+    return tuple(parsed)
 
 
 _GLOB_CHARS = set("*?[")
@@ -648,13 +841,23 @@ def example_config() -> str:
         "#",
         "# [[allow]]",
         '# reason = "SCCM client push installs ccmsetup"   # required',
-        '# rules = ["CW-001", "CW-012"]                    # optional, default: all',
+        '# rules = ["CW-001", "CW-005", "CW-012"]          # optional, default: all',
         '# users = ["CORP\\\\svc_sccm"]                     # globs; bare name = any domain',
         '# hosts = ["WKS*"]                                # target host globs',
         '# sources = ["10.0.5.0/24", "SCCM01"]             # client IP/CIDR or host glob',
         "# expires = 2026-12-31                            # optional; ignored after this date",
-        "# [allow.fields]                                  # regex on evidence event fields",
+        "# # Every evidence record must match one [[allow.fields]] table: all of its",
+        "# # fields, each regex anchored. Pin what the record is (binary, share, pipe),",
+        "# # not only names an attacker can reuse.",
+        "# [[allow.fields]]                                # the install (System 7045)",
         '# ServiceName = "^ccmsetup$"',
+        "# ImagePath = '^\"?C:\\\\Windows\\\\ccmsetup\\\\ccmsetup\\.exe\"?( |$)'",
+        "# [[allow.fields]]                                # the binary copied to ADMIN$",
+        "# ShareName = '\\\\ADMIN\\$$'",
+        "# RelativeTargetName = '^ccmsetup\\\\ccmsetup\\.exe$'",
+        "# [[allow.fields]]                                # the SCM pipe, opened on IPC$",
+        "# ShareName = '\\\\IPC\\$$'",
+        "# RelativeTargetName = '^svcctl$'",
     ]
     return "\n".join(lines) + "\n"
 

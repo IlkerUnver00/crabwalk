@@ -240,7 +240,7 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    screened = config.screen(run_rules(ctx, rules))
+    screened = config.screen(run_rules(ctx, rules), events=ctx.events)
     findings = screened.kept
 
     if args.out:

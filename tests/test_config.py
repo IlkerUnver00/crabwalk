@@ -10,7 +10,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from crabwalk.catalog import SECURITY, SYSTEM
+from crabwalk.catalog import SECURITY, SYSMON, SYSTEM
 from crabwalk.cli import main
 from crabwalk.config import (
     Config,
@@ -293,8 +293,179 @@ def test_one_benign_evidence_event_does_not_excuse_the_rest():
               ev(7045, channel=SYSTEM, minutes=2 / 60, ServiceName="PSEXESVC", ImagePath=r"C:\p.exe")]
     (psexec,) = [f for f in run_rules(HuntContext.build(events)) if f.rule_id == "CW-012"]
     assert not allow(rules=["CW-012"], fields={"RelativeTargetName": "^svcctl$"}).matches(psexec)
-    covering = allow(rules=["CW-012"], fields={"RelativeTargetName": "^(svcctl|psexesvc.*)$"})
+    covering = allow(rules=["CW-012"], fields=[{"RelativeTargetName": "^(svcctl|psexesvc.*)$"},
+                                               {"ServiceName": "^psexesvc$"}])
     assert covering.matches(psexec)
+    # One table naming both fields describes an event that carries both: none here.
+    assert not allow(rules=["CW-012"], fields={"RelativeTargetName": "^(svcctl|psexesvc.*)$",
+                                               "ServiceName": "^psexesvc$"}).matches(psexec)
+
+
+def svcctl_then(install):
+    events = [pipe_open("svcctl"), install]
+    (finding,) = [f for f in run_rules(HuntContext.build(events)) if f.rule_id == "CW-012"]
+    return finding
+
+
+def test_an_entry_cannot_excuse_evidence_it_says_nothing_about():
+    # svcctl polling allowlisted by pipe name: the same client's svcctl open
+    # followed by a service install is a different story. No table describes
+    # the 7045, so the entry must not vouch for it.
+    escalated = svcctl_then(ev(7045, channel=SYSTEM, minutes=0.5, ServiceName="remotesvc",
+                               ImagePath=r"C:\Windows\remotesvc.exe"))
+    assert escalated.severity == "high"
+    config = parse_config({"allow": [{"reason": "monitoring polls svcctl", "rules": ["CW-012"],
+                                      "sources": ["10.0.0.5"],
+                                      "fields": {"RelativeTargetName": "^svcctl$"}}]})
+    screened = config.screen([escalated])
+    assert screened.kept == [escalated] and screened.suppressed == []
+    (warning,) = screened.warnings
+    assert "kept 1 CW-012 finding(s)" in warning and "System 7045" in warning
+    # The same polling without an install is still suppressed, without a warning.
+    (polling,) = [f for f in run_rules(HuntContext.build([pipe_open("svcctl")]))
+                  if f.rule_id == "CW-012"]
+    quiet = config.screen([polling])
+    assert quiet.kept == [] and quiet.warnings == []
+
+
+def test_generic_fields_cannot_vouch_for_an_escalating_install():
+    # Security 4697 and Sysmon 13 installs carry the generic actor fields an
+    # svcctl table narrows by; that must not let the table vouch for them.
+    by_4697 = svcctl_then(ev(4697, minutes=0.5, ServiceName="remotesvc", ServiceFileName=r"C:\r.exe",
+                             SubjectUserName="admin", SubjectDomainName="CORP"))
+    entry = allow(rules=["CW-012"], sources=["10.0.0.5"],
+                  fields={"RelativeTargetName": "^svcctl$", "SubjectUserName": "^admin$"})
+    assert not entry.matches(by_4697)
+    system = "NT AUTHORITY\\SYSTEM"
+    sysmon = [ev(18, channel=SYSMON, Image="System", User=system, PipeName="\\svcctl"),
+              ev(13, channel=SYSMON, minutes=0.5, Image=r"C:\Windows\system32\services.exe", User=system,
+                 TargetObject=r"HKLM\System\CurrentControlSet\Services\hello\ImagePath",
+                 Details=r"%COMSPEC% /b /c start /b /min powershell.exe -nop -w hidden -enc AA")]
+    (by_sysmon_13,) = [f for f in run_rules(HuntContext.build(sysmon)) if f.rule_id == "CW-012"]
+    assert by_sysmon_13.severity == "critical"
+    entry = allow(rules=["CW-012"], hosts=["SRV01"],
+                  fields={"PipeName": r"^\\svcctl$", "User": "^NT AUTHORITY\\\\SYSTEM$"})
+    assert not entry.matches(by_sysmon_13)
+
+
+@pytest.mark.parametrize("narrowing", [
+    {"SubjectUserNmae": "^svc_deploy$"},  # misspelled
+    {"TargetUserName": "^svc_deploy$"},  # a 4624 field: the 5145 drop never carries it
+])
+def test_a_misspelled_or_misplaced_field_fails_closed(narrowing):
+    drop = ev(5145, ShareName="\\\\*\\ADMIN$", RelativeTargetName="evil.exe", IpAddress="10.0.0.5",
+              SubjectUserName="eve", SubjectDomainName="CORP")
+    (cw005,) = [f for f in run_rules(HuntContext.build([drop])) if f.rule_id == "CW-005"]
+    config = parse_config({"allow": [{"reason": "deployment drops", "rules": ["CW-005"],
+                                      "fields": {"RelativeTargetName": r"\.exe$", **narrowing}}]})
+    screened = config.screen([cw005])
+    assert screened.kept == [cw005]  # eve's drop stays visible
+    (warning,) = screened.warnings
+    assert "never occur together in one record" in warning
+    assert "separate [[allow.fields]] tables" in warning
+
+
+def test_one_entry_can_describe_a_tool_across_rules_and_log_sources():
+    # One table per kind of evidence: the 5145s, the Sysmon pipe events and the
+    # install. CW-005's single 5145 needs only the first; a Security-only
+    # export simply never uses the PipeName table.
+    drop = ev(5145, ShareName="\\\\*\\ADMIN$", RelativeTargetName="PSEXESVC.exe",
+              IpAddress="10.0.0.5", SubjectUserName="admin", SubjectDomainName="CORP")
+    events = [drop, pipe_open("svcctl", 0.1), pipe_open("PSEXESVC", 0.3),
+              pipe_open("PSEXESVC-WKS66-4242-stdin", 0.4),
+              ev(7045, channel=SYSTEM, minutes=0.2 / 60, ServiceName="PSEXESVC",
+                 ImagePath=r"%SystemRoot%\PSEXESVC.exe")]
+    findings = run_rules(HuntContext.build(events))
+    assert sorted(f.rule_id for f in findings) == ["CW-005", "CW-012"]
+    config = parse_config({"allow": [{
+        "reason": "IT runs stock PsExec", "rules": ["CW-012", "CW-005"], "sources": ["10.0.0.5"],
+        "fields": [{"RelativeTargetName": r"^(svcctl|psexesvc(\.exe)?|psexesvc-WKS66-\d+-std(in|out|err))$"},
+                   {"PipeName": r"^\\psexesvc"}, {"ServiceName": "^psexesvc$"}]}]})
+    screened = config.screen(findings, events=events)
+    assert screened.kept == [] and len(screened.suppressed) == 2
+    assert screened.warnings == []  # an unused table is harmless when everything was suppressed
+
+
+def test_a_table_for_another_log_source_is_not_called_a_typo():
+    # The recommended svcctl entry has a PipeName table for Sysmon hosts. On
+    # Security-only data it is unused, yet the entry still works on the 5145s,
+    # so the only warning is about the install no table describes.
+    events = [pipe_open("svcctl"), ev(7045, channel=SYSTEM, minutes=0.5, ServiceName="remotesvc",
+                                      ImagePath=r"C:\Windows\remotesvc.exe")]
+    findings = run_rules(HuntContext.build(events))
+    config = parse_config({"allow": [{"reason": "polling", "rules": ["CW-012"], "sources": ["10.0.0.5"],
+                                      "fields": [{"RelativeTargetName": "^svcctl$"},
+                                                 {"PipeName": r"^\\svcctl$"}]}]})
+    (warning,) = config.screen(findings, events=events).warnings
+    assert "System 7045" in warning
+
+
+def test_an_entry_that_vouches_for_nothing_names_its_unseen_fields_as_written():
+    install = ev(7045, channel=SYSTEM, ServiceName="ccmsetup", ImagePath=r"C:\ccm\ccmsetup.exe")
+    other = ev(5145, ShareName="\\\\*\\IPC$", RelativeTargetName="srvsvc", IpAddress="10.0.5.9")
+    config = parse_config({"allow": [{"reason": "sccm", "users": ["svc_sccm"],
+                                      "fields": [{"ServiceName": "^ccmsetup$", "ImagPath": "^C:"},
+                                                 {"RelativeTargetName": "^svcctl$"}]}]})
+    screened = config.screen([finding(user="CORP\\svc_sccm", evidence=[install])],
+                             events=[install, other])
+    (warning,) = screened.warnings  # the lone RelativeTargetName table is not a typo
+    assert "fields 'ServiceName', 'ImagPath' never occur together in one record" in warning
+
+
+def test_a_near_miss_also_names_the_table_that_was_probably_meant():
+    # The Sysmon table has a typo in its narrowing field, so the Sysmon 18
+    # half of each polling cluster goes undescribed; say which table it was.
+    events = [pipe_open("svcctl"), ev(18, channel=SYSMON, Image="System", PipeName="\\svcctl")]
+    findings = run_rules(HuntContext.build(events))
+    config = parse_config({"allow": [{"reason": "polling", "rules": ["CW-012"], "sources": ["10.0.0.5"],
+                                      "fields": [{"RelativeTargetName": "^svcctl$"},
+                                                 {"PipeName": r"^\\svcctl$", "Imgae": "^System$"}]}]})
+    (warning,) = config.screen(findings, events=events).warnings
+    assert "Sysmon 18" in warning and "'PipeName', 'Imgae'" in warning
+
+
+def test_null_values_count_as_absent_and_every_case_variant_must_match():
+    entry = allow(fields={"ServiceName": "^ccmsetup$"})
+    null = ev(7045, channel=SYSTEM, ServiceName=None, ImagePath=r"C:\x.exe")
+    assert entry.event_status(null) == "silent"
+    assert not allow(fields={"ServiceName": "^n"}).matches(finding(evidence=[null]))  # not 'None'
+    twins = ev(7045, channel=SYSTEM, ServiceName="evilsvc", servicename="ccmsetup")
+    assert entry.event_status(twins) == "contradicted"
+
+
+def test_near_misses_are_reported_once_per_kind_and_only_for_shown_findings():
+    installs = [svcctl_then(ev(7045, channel=SYSTEM, minutes=0.5, ServiceName=f"svc{i}",
+                               ImagePath=r"C:\s.exe")) for i in range(3)]
+    entry = {"reason": "monitoring polls svcctl", "rules": ["CW-012"], "sources": ["10.0.0.5"],
+             "fields": {"RelativeTargetName": "^svcctl$"}}
+    (warning,) = parse_config({"allow": [entry]}).screen(installs).warnings
+    assert "kept 3 CW-012 finding(s)" in warning
+    hidden = parse_config({"rules": {"min_severity": "critical"}, "allow": [entry]}).screen(installs)
+    assert hidden.below_min_severity == 3 and hidden.warnings == []
+
+
+@pytest.mark.parametrize("fields, message", [
+    ({}, "empty; an empty table would vouch for any record"),
+    ([{"ServiceName": "^x$"}, {}], r"fields\[1\]: empty"),
+    ([], "must be a table"),
+    ("^x$", "must be a table"),
+    ([{"ServiceName": "^x$"}, "^y$"], r"fields\[1\]: must be a table"),
+    ({"": "^x$"}, "empty field name"),
+    *[({"ServiceName": regex}, "accepts any value")
+      for regex in ("", ".*", "x|", ".", ".+", r"\S", r"\b|\B", "^.+$", "(?s)^.+$", r"[\s\S]")],
+    # a table must say what a record is; who/where and per-type constants
+    # appear on many kinds of record, installs included
+    ({"SubjectUserName": "^admin$"}, "names no field that says what a record is"),
+    ([{"RelativeTargetName": "^svcctl$"}, {"User": "^NT AUTHORITY"}], r"fields\[1\]: names no field"),
+    ({"IpAddress": r"^10\.", "WorkstationName": "^JUMP"}, "use users, hosts or sources"),
+    ({"AccountName": "^LocalSystem$"}, "names no field"),  # 7045: what nearly every tool runs as
+    ({"ShareName": r"\\IPC\$$"}, "names no field"),  # every pipe open
+    ({"ObjectType": "^File$"}, "names no field"),  # every 5145
+    ({"SvcName": "^ccmsetup$"}, "check the spelling"),  # a misspelled identifying field
+])
+def test_field_tables_are_validated(fields, message):
+    with pytest.raises(ConfigError, match=message):
+        parse_config({"allow": [{"reason": "x", "users": ["a"], "fields": fields}]})
 
 
 def test_field_names_match_case_insensitively():
@@ -302,14 +473,14 @@ def test_field_names_match_case_insensitively():
     assert allow(fields={"servicename": "^ccmsetup$"}).matches(finding(evidence=[install]))
 
 
-def test_misspelled_field_name_is_reported():
+def test_misspelled_narrowing_field_is_reported():
     install = ev(7045, channel=SYSTEM, ServiceName="ccmsetup", ImagePath=r"C:\ccm\ccmsetup.exe")
     config = parse_config({"allow": [{"reason": "sccm", "users": ["svc_sccm"],
-                                      "fields": {"SvcName": "^ccmsetup$"}}]})
+                                      "fields": {"ServiceName": "^ccmsetup$", "ImagePth": "^C:"}}]})
     screened = config.screen([finding(user="CORP\\svc_sccm", evidence=[install])])
     assert len(screened.kept) == 1
     (warning,) = screened.warnings
-    assert "'svcname' appears in no evidence" in warning
+    assert "'ImagePth' never occur together in one record" in warning
 
 
 def test_rules_report_domain_qualified_users_so_qualified_patterns_work():
@@ -392,6 +563,13 @@ def test_example_config_is_valid_inert_and_complete():
     for rule in config.build_rules():
         for name in rule.tunables:
             assert getattr(rule, name) == getattr(type(rule), name), f"{rule.id}.{name}"
+    # and the allowlist example is a valid entry with one table per kind of evidence
+    allow_block = text[text.index("# [[allow]]"):]
+    uncommented = "\n".join(line[2:] for line in allow_block.splitlines())
+    (entry,) = parse_config(tomllib.loads(uncommented)).allow
+    assert [[name for name, _ in table] for table in entry.fields] == [
+        ["ServiceName", "ImagePath"], ["ShareName", "RelativeTargetName"],
+        ["ShareName", "RelativeTargetName"]]
 
 
 def test_cli_config_example_and_check(tmp_path, capsys):

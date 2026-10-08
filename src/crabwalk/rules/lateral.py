@@ -8,7 +8,16 @@ from datetime import timedelta
 from typing import Any
 
 from ..catalog import SECURITY
-from ..hosts import HostResolver, is_machine_account, remote_ip, remote_name, short_host
+from ..hosts import (
+    HostResolver,
+    account_name,
+    clean_ip,
+    is_anonymous,
+    is_machine_account,
+    remote_ip,
+    remote_name,
+    short_host,
+)
 from ..sessions import MovementEdge, display_user
 from .base import Finding, HuntContext, Rule, ServiceInstall
 
@@ -48,13 +57,19 @@ _TASK_COMMAND = re.compile(r"<Command>([^<]+)</Command>", re.IGNORECASE)
 
 
 def _inbound_edges_to(ctx: HuntContext, computer: str) -> list[MovementEdge]:
-    """Non-machine-account remote logons observed on ``computer`` itself."""
+    """Remote logons by real accounts observed on ``computer`` itself.
+
+    Machine accounts and ANONYMOUS LOGON null sessions (browser, srvsvc
+    enumeration) arrive constantly and cannot install a service, so they
+    must not take the blame for an install that follows them.
+    """
     return [
         e
         for e in ctx.tracking.edges
         if e.dst == computer
         and e.kind != "explicit-credentials"
         and not e.is_machine_account
+        and not is_anonymous(e.user, e.event.get("TargetUserSid") if e.event else None)
     ]
 
 
@@ -112,7 +127,7 @@ class RdpChain(Rule):
         hosts = HostResolver()
         for edge in rdp:
             hosts.learn(edge.src_ip, edge.src_host)
-        seen: set[tuple[str, str, str, str]] = set()
+        seen: set[tuple[tuple[str, str | None, str], str, str, str]] = set()
         for first in rdp:
             middle = short_host(first.dst) or ""
             for second in rdp:
@@ -123,7 +138,16 @@ class RdpChain(Rule):
                 target = short_host(second.dst) or ""
                 if not middle or second_src != middle or target == middle:
                     continue
-                key = (first.src, middle, target, second.user)
+                # A host logs one inbound session as 4624 LT10 *and* TS-LSM 21,
+                # with the account in different notations (CORP\alice,
+                # CORP.LOCAL\alice, alice@corp.local). Key each hop on what
+                # identifies its session (resolved source, client IP, account
+                # name), not on its display, so the chain is told once; two
+                # clients that merely share a (client-chosen) workstation name
+                # stay apart.
+                origin = (hosts.key(first.src_ip, first.src_host) or first.src,
+                          clean_ip(first.src_ip), account_name(first.user).lower())
+                key = (origin, middle, target, account_name(second.user).lower())
                 if key in seen:
                     continue
                 seen.add(key)
@@ -136,6 +160,7 @@ class RdpChain(Rule):
                         f"{first.timestamp:%H:%M:%S}) -> {second.dst} ({second.user}, "
                         f"{second.timestamp:%H:%M:%S})"
                     ),
+                    evidence=[e.event for e in (first, second) if e.event is not None],
                     src_ip=second.src_ip,
                     src_host=second.src_host or first.dst,
                 )
@@ -160,7 +185,7 @@ class PassTheHash(Rule):
             process = str(event.get("LogonProcessName") or "").strip().lower()
             package = str(event.get("AuthenticationPackageName") or "").upper()
             account = str(event.get("TargetUserName") or "")
-            if is_machine_account(account) or "ANONYMOUS" in account.upper():
+            if is_machine_account(account) or is_anonymous(account, event.get("TargetUserSid")):
                 continue
             user = display_user(event.get("TargetDomainName"), account)
 

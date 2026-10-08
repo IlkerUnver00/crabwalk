@@ -132,6 +132,7 @@ class MovementEdge:
     kind: str  # network / rdp / rdp-session / explicit-credentials / ...
     logon_id: str | None = None
     privileged: bool = False  # backfilled when 4672 is seen for the session
+    event: NormalizedEvent | None = field(default=None, repr=False, compare=False)  # the record
 
     @property
     def is_machine_account(self) -> bool:
@@ -246,6 +247,7 @@ class _Tracker:
                 ),
                 logon_id=logon_id,
                 privileged=session.privileged,
+                event=event,
             )
             self.result.edges.append(edge)
             self._session_edges[(event.computer, logon_id)].append(edge)
@@ -288,6 +290,7 @@ class _Tracker:
                 logon_type=None,
                 kind="explicit-credentials",
                 logon_id=norm_logon_id(event.get("SubjectLogonId")),
+                event=event,
             )
         )
 
@@ -306,5 +309,6 @@ class _Tracker:
                 dst=event.computer,
                 logon_type=10,
                 kind="rdp-session" if event.event_id == 21 else "rdp-reconnect",
+                event=event,
             )
         )
