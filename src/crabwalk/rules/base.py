@@ -181,6 +181,7 @@ class Rule(ABC):
     severity: str
     techniques: tuple[str, ...]
     tunables: ClassVar[tuple[str, ...]] = ()
+    zero_ok_tunables: ClassVar[tuple[str, ...]] = ()  # durations allowed to be 0 (tolerances)
 
     @abstractmethod
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]: ...

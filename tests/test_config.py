@@ -74,6 +74,63 @@ def test_valid_sources_still_parse():
     assert entry.source_hosts == ("10.0.5.*", "SCCM*", "sccm01.corp.local")
 
 
+@pytest.mark.parametrize("source, src_ip, src_host", [
+    ("::ffff:10.0.5.1", "::ffff:10.0.5.1", None),  # as copied from a 4624 IpAddress
+    ("::ffff:10.0.5.0/120", "10.0.5.77", None),  # an IPv4-mapped network
+    ("2001:db8::*", "2001:db8::5", None),  # IPv6 address glob
+    ("ÇAĞRI-PC", None, "ÇAĞRI-PC"),  # localized computer name
+    ("sccm01.corp.local.", None, "sccm01.corp.local"),  # FQDN root dot
+    ("SCCM01$", None, "SCCM01"),  # copied from a machine-account field
+])
+def test_source_forms_analysts_paste_actually_match(source, src_ip, src_host):
+    assert allow(sources=[source]).matches(finding(src_ip=src_ip, src_host=src_host))
+
+
+def test_ipv4_mapped_sources_are_stored_as_ipv4():
+    entry = allow(sources=["::ffff:10.0.5.0/120"])
+    assert [str(n) for n in entry.networks] == ["10.0.5.0/24"]
+
+
+@pytest.mark.parametrize("hosts", [["SCCM 01"], ["10.0.5.300"], ["srv,01"]])
+def test_hosts_get_the_same_validation_as_sources(hosts):
+    with pytest.raises(ConfigError, match="hosts"):
+        parse_config({"allow": [{"reason": "x", "hosts": hosts}]})
+
+
+def test_hosts_accept_localized_names_and_normalize():
+    entry = allow(hosts=["ÇAĞRI-PC", "dc01.corp.local."])
+    assert entry.hosts == ("ÇAĞRI-PC", "dc01.corp.local")
+    assert entry.matches(finding(host="ÇAĞRI-PC"))
+
+
+@pytest.mark.parametrize("rule, name, value", [
+    ("CW-002", "window", 0), ("CW-001", "window", "0.5s"), ("CW-012", "cluster_gap", "0s"),
+])
+def test_a_zero_window_is_refused(rule, name, value):
+    with pytest.raises(ConfigError, match="must be at least 1s; use rules.disable"):
+        parse_config({"rules": {rule: {name: value}}})
+
+
+def test_a_zero_tolerance_is_allowed():
+    config = parse_config({"rules": {"CW-012": {"skew": 0}}})
+    assert config.tunables["CW-012"]["skew"] == timedelta(0)
+
+
+def test_console_output_never_crashes_on_unencodable_text(tmp_path):
+    # Windows redirects stdout in the locale code page (cp1254 here) with strict errors.
+    import os
+    import subprocess
+
+    path = tmp_path / "c.toml"
+    path.write_text('[[allow]]\nreason = "SCCM push → ccmsetup ✓"\nusers = ["svc"]\n',
+                    encoding="utf-8")
+    env = dict(os.environ, PYTHONIOENCODING="cp1254")
+    run = subprocess.run([sys.executable, "-m", "crabwalk.cli", "config", str(path)],
+                         capture_output=True, env=env)
+    assert run.returncode == 0, run.stderr.decode("cp1254", "replace")
+    assert b"\\u2192" in run.stdout
+
+
 def test_extension_tunable_is_normalized():
     config = parse_config({"rules": {"CW-005": {"extensions": ["EXE", ".Dll", "ps1"]}}})
     assert config.tunables["CW-005"]["extensions"] == (".exe", ".dll", ".ps1")
@@ -168,6 +225,18 @@ def test_command_line_overrides_layer_over_the_file():
     # ...but never a record that cannot show its domain
     ("CORP\\svc_sccm", "svc_sccm", False),
     ("CORP\\*", "S-1-5-21-1-2-3-500", False),
+    # DNS-form domains as Kerberos logons record them (corpus: WINLAB.LOCAL\Administrator)
+    ("WINLAB\\Administrator", "WINLAB.LOCAL\\Administrator", True),
+    ("Administrator@winlab.local", "WINLAB.LOCAL\\Administrator", True),
+    ("lgrove@THREEBEESCO.COM", "THREEBEESCO.COM\\lgrove", True),
+    ("CORP.LOCAL\\svc", "CORP\\svc", True),
+    # a written realm never reaches into another forest or collapses to a wildcard
+    ("svc@corp.contoso.com", "svc@corp.fabrikam.com", False),
+    ("svc@*.contoso.com", "svc@x.contoso.com", True),
+    ("svc@*.contoso.com", "FABRIKAM\\svc", False),
+    ("svc@*.contoso.com", "CONTOSO\\svc", False),  # a glob realm cannot be proven from NetBIOS
+    # NetBIOS names that differ from the DNS label cannot be related: documented, list both
+    ("3B\\lgrove", "lgrove@THREEBEESCO.COM", False),
 ])
 def test_user_patterns(pattern, user, hit):
     assert allow(users=[pattern]).matches(finding(user=user)) is hit

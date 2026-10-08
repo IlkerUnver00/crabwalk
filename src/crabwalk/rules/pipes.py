@@ -320,6 +320,7 @@ class NamedPipeExecution(Rule):
     enum_distinct_pipes = DEFAULT_WINDOWS.enum_distinct_pipes
     tunables = ("cluster_gap", "follow_window", "drop_window", "skew", "enum_window",
                 "enum_distinct_pipes")
+    zero_ok_tunables = ("skew",)
 
     def windows(self) -> PipeWindows:
         return PipeWindows(self.cluster_gap, self.follow_window, self.drop_window, self.skew,

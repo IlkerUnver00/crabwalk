@@ -153,15 +153,19 @@ ServiceName = "^ccmsetup$"
   pointer to the offending line. A typo in a suppression list must never pass
   quietly. A CIDR with host bits (`10.0.5.0/2`) is refused rather than widened,
   and an address-shaped typo (`10.0.5.300`) is refused rather than kept as a
-  host glob that never matches. An `[[allow]]` entry needs a reason and at least
+  host glob that never matches. A correlation window of zero, which could never
+  fire, is refused too. An `[[allow]]` entry needs a reason and at least
   one criterion; silencing a rule outright is what `disable` is for.
 - **Narrow by construction.** A field regex must hold for *every* evidence event
   that carries the field, so one benign event cannot excuse the rest of a
-  finding. A domain-qualified user (`CORP\svc`) matches either notation of that
-  domain (`svc@corp.local`), but never a record that does not show its domain; a
-  bare name matches any domain. Field names are case-insensitive, and a field
-  name that occurs in none of the evidence it is meant to match is reported as
-  a likely typo.
+  finding. A NetBIOS-qualified user (`CORP\svc`) matches every notation of that
+  domain (`CORP.LOCAL\svc`, `svc@corp.local`). A DNS realm (`svc@corp.contoso.com`)
+  is compared whole, so it never reaches into another forest. A qualified pattern
+  never matches a record that does not show its domain (a bare name, a SID), and
+  a bare name matches any domain. Where a domain's NetBIOS name is not the first
+  label of its DNS name, list both forms. Field names are case-insensitive, and a
+  field name that occurs in none of the evidence it is meant to match is reported
+  as a likely typo.
 - **Nothing disappears silently.** Suppressed findings are counted on the
   console (`--show-suppressed` lists them), written to the JSON output with the
   allow entry that matched, and listed in the HTML report. Expired entries are

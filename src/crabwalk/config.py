@@ -141,33 +141,60 @@ class AllowEntry:
         return False
 
 
-def _split_account(account: str) -> tuple[str | None, str]:
-    """('corp', 'svc') from 'CORP\\\\svc' or 'svc@corp.local'; (None, 'svc') from 'svc'.
+@dataclass(frozen=True)
+class _Account:
+    """An account as logged: 'CORP\\\\svc', 'CORP.LOCAL\\\\svc', 'svc@corp.local' or 'svc'.
 
-    A UPN realm is reduced to its first label, which is the NetBIOS domain
-    name in the common case (corp.local -> corp)."""
+    ``realm`` is the DNS form when the record shows one (dotted), ``label``
+    the NetBIOS-style short domain (the realm's first label, or the domain as
+    written when it has no dot).
+    """
+
+    name: str
+    label: str | None = None
+    realm: str | None = None
+
+
+def _split_account(account: str) -> _Account:
     account = account.strip().lower()
     if "\\" in account:
         domain, _, name = account.rpartition("\\")
-        return domain, name
-    if "@" in account:
-        name, _, realm = account.partition("@")
-        return realm.split(".", 1)[0], name
-    return None, account
+    elif "@" in account:
+        name, _, domain = account.partition("@")
+    else:
+        return _Account(account)
+    if "." in domain:
+        return _Account(name, domain.split(".", 1)[0], domain)
+    return _Account(name, domain or None)
 
 
 def _user_matches(pattern: str, user: str) -> bool:
     """A bare 'svc*' matches the account under any domain. A domain-qualified
-    'CORP\\\\svc' (or 'svc@corp.local') also requires the finding to carry that
-    domain, in either notation; a finding that logged only a bare name, or a
-    SID, cannot prove its domain and does not match."""
-    want_domain, want_name = _split_account(pattern)
-    have_domain, have_name = _split_account(str(user or ""))
-    if not fnmatch.fnmatchcase(have_name, want_name):
+    pattern also requires the record to show that domain, never matching
+    more than written:
+
+    * a DNS realm in the pattern ('svc@corp.contoso.com', 'CORP.CONTOSO.COM\\\\svc')
+      is compared whole against a record's realm (globs allowed), and only
+      against a NetBIOS-only record through its first label when written
+      without globs ('CORP');
+    * a NetBIOS domain ('CORP\\\\svc') matches a record's NetBIOS domain or its
+      realm's first label, so 'CORP.LOCAL\\\\svc' and 'svc@corp.local' qualify.
+
+    A record that logged only a bare name, or a SID, cannot prove its domain
+    and never matches a qualified pattern. When a domain's NetBIOS name is not
+    the first label of its DNS name, list both forms.
+    """
+    want, have = _split_account(pattern), _split_account(str(user or ""))
+    if not fnmatch.fnmatchcase(have.name, want.name):
         return False
-    if want_domain is None:
+    if want.label is None:
         return True
-    return have_domain is not None and fnmatch.fnmatchcase(have_domain, want_domain)
+    if want.realm is not None:
+        if have.realm is not None:
+            return fnmatch.fnmatchcase(have.realm, want.realm)
+        literal = not _GLOB_CHARS & set(want.realm)
+        return literal and have.label is not None and have.label == want.label
+    return have.label is not None and fnmatch.fnmatchcase(have.label, want.label)
 
 
 def _host_matches(pattern: str, host: str) -> bool:
@@ -355,6 +382,7 @@ def parse_config(data: dict[str, Any], *, source: str | None = None) -> Config:
 #: Longest correlation window accepted. Beyond a year a window is a typo, and
 #: timestamps shifted by it overflow datetime arithmetic inside the rules.
 MAX_DURATION = timedelta(days=366)
+MIN_WINDOW = timedelta(seconds=1)
 
 
 def parse_duration(value: Any, where: str) -> timedelta:
@@ -390,6 +418,11 @@ def _tunables(cls: type[Rule], values: dict[str, Any], where: str) -> dict[str, 
             parsed[name] = raw
         elif isinstance(default, timedelta):
             parsed[name] = parse_duration(raw, key)
+            # A zero window cannot correlate anything: it would switch the rule
+            # off without saying so. Only tolerances (CW-012 skew) may be zero.
+            if parsed[name] < MIN_WINDOW and name not in cls.zero_ok_tunables:
+                raise ConfigError(f"{key}: must be at least {format_duration(MIN_WINDOW)}; "
+                                  f"use rules.disable to turn {cls.id} off")
         elif isinstance(default, int):
             if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
                 raise ConfigError(f"{key}: expected a whole number >= 1, got {raw!r}")
@@ -448,7 +481,8 @@ def _allow_entry(raw: Any, index: int) -> AllowEntry:
         rules=frozenset(_rule_ids(_str_list(rules, f"{where}.rules"), f"{where}.rules"))
         if rules is not None else None,
         users=tuple(_optional_list(raw, "users", where)),
-        hosts=tuple(_optional_list(raw, "hosts", where)),
+        hosts=tuple(_host_pattern(h, f"{where}.hosts[{i}]")
+                    for i, h in enumerate(_optional_list(raw, "hosts", where))),
         networks=tuple(networks),
         source_hosts=tuple(source_hosts),
         fields=tuple(fields),
@@ -461,7 +495,9 @@ def _allow_entry(raw: Any, index: int) -> AllowEntry:
 
 
 _GLOB_CHARS = set("*?[")
-_HOST_GLOB = re.compile(r"[A-Za-z0-9.\-_*?\[\]!]+")
+# Unicode word characters: Windows allows localized computer names (ÇAĞRI-PC).
+_HOST_GLOB = re.compile(r"[\w.\-*?\[\]!]+")
+_IPV6_GLOB = re.compile(r"[0-9a-fA-F:*?\[\]!]+")
 
 
 def _source(item: str, where: str) -> Network | str:
@@ -471,11 +507,20 @@ def _source(item: str, where: str) -> Network | str:
     0.0.0.0/2 — a suppression must never silently cover more than written.
     Something shaped like an address that does not parse ('10.0.5.300',
     '10.0.5', a range) is an error too, not a host glob that never matches.
+    An IPv4-mapped IPv6 address or network is stored as the IPv4 network it
+    denotes, since findings carry the unwrapped IPv4 form.
     """
     try:
-        return ipaddress.ip_network(item, strict=True)
+        network = ipaddress.ip_network(item, strict=True)
     except ValueError:
-        pass
+        network = None
+    if network is not None:
+        mapped = getattr(network.network_address, "ipv4_mapped", None)
+        if mapped is not None:
+            if network.prefixlen < 96:
+                raise ConfigError(f"{where}: {item!r} is wider than the IPv4-mapped range")
+            return ipaddress.ip_network(f"{mapped}/{network.prefixlen - 96}")
+        return network
     if "/" in item:
         try:
             widened = ipaddress.ip_network(item, strict=False)
@@ -483,13 +528,29 @@ def _source(item: str, where: str) -> Network | str:
             raise ConfigError(f"{where}: {item!r} is not a valid CIDR") from None
         raise ConfigError(f"{where}: {item!r} has host bits set; write the network itself, "
                           f"e.g. {widened}") from None
-    is_glob = bool(_GLOB_CHARS & set(item))
-    if ":" in item or (not is_glob and re.fullmatch(r"[0-9.\-]+", item)):
+    if ":" in item:
+        if _GLOB_CHARS & set(item) and _IPV6_GLOB.fullmatch(item):
+            return item.lower()  # an IPv6 address glob such as 2001:db8::*
+        raise ConfigError(f"{where}: {item!r} looks like an address but is not a valid IP or CIDR")
+    return _host_pattern(item, where)
+
+
+def _host_pattern(item: str, where: str) -> str:
+    """A host name or glob for `hosts` and `sources`.
+
+    The FQDN root dot and a machine-account '$' are dropped (they are not part
+    of what logs compare), and an address-shaped string that is neither a
+    valid IP nor a glob is refused rather than kept as a pattern that can
+    never match.
+    """
+    pattern = item.strip().rstrip("$").rstrip(".")
+    is_glob = bool(_GLOB_CHARS & set(pattern))
+    if not is_glob and re.fullmatch(r"[0-9.\-]+", pattern):
         raise ConfigError(f"{where}: {item!r} looks like an address but is not a valid IP or CIDR "
                           "(use a CIDR, or a glob such as 10.0.5.*)")
-    if not _HOST_GLOB.fullmatch(item):
+    if not pattern or not _HOST_GLOB.fullmatch(pattern):
         raise ConfigError(f"{where}: {item!r} is not an IP, CIDR or host name glob")
-    return item
+    return pattern
 
 
 def _str_list(value: Any, where: str, *, allow_empty: bool = False) -> list[str]:

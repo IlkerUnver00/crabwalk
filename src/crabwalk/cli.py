@@ -23,9 +23,27 @@ from .rules.base import HuntContext
 
 
 def main(argv: list[str] | None = None) -> int:
+    _tolerant_console()
     parser = _build_parser()
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def _tolerant_console() -> None:
+    """Never crash on a character the console cannot show.
+
+    Evidence and config text are full of names in other scripts (a Turkish
+    host, an analyst's note), and a redirected stdout on Windows uses the
+    locale code page (cp1252, cp1254, ...) with strict errors. Escape what
+    does not fit instead of aborting halfway through the output.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(errors="backslashreplace")
+            except (ValueError, OSError):  # pragma: no cover - exotic streams
+                pass
 
 
 def _build_parser() -> argparse.ArgumentParser:
