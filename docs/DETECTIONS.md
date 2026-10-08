@@ -74,11 +74,14 @@ are identical in (rule, time, host, user, summary) are collapsed.
 **One event, one finding.** A finding is merged into another rule's finding that already
 tells it: one that cites every record it cites, claims at least its techniques at no lower
 severity, adds something (more records, techniques or severity), and names the same host,
-the same account and source (or none), within 10 minutes. The merged finding is listed under
-the other ("also matched", in full in the JSON) and still counts as fired for the corpus
-tests. In practice CW-012 absorbs the CW-005 drop it credits, and could absorb a CW-001 or
-CW-004 about the same install or task by the same actor; findings that disagree about who
-did it, or from where, stay separate (`merge_overlaps()` in `rules/__init__.py`).
+the same account (domain-aware: a local `SRV01\x` is not `CORP\x`) and source, or none,
+within 10 minutes. The merged finding is listed under the other ("also matched", in full in
+the JSON) and still counts as fired for the corpus tests. In practice CW-012 absorbs the
+CW-005 drop it credits. It absorbs a CW-001 or CW-004 about the same install or task only
+when that finding names no source host or the same one: CW-001 and CW-004 take the
+workstation name from the logon, which CW-012 knows only from PsExec stdio pipes, so
+usually both stay. Findings that disagree about who did it, or from where, stay separate
+(`merge_overlaps()` in `rules/__init__.py`).
 
 **Narrative.** Every rule also sets a short past-tense `action` phrase on its findings
 ("installed service 'x' (c:\x.exe)"). The attack story (`narrative.py`, `hunt --story`)
@@ -278,7 +281,7 @@ Config test: `test_privileged_ntlm_switch_keeps_the_seclogo_signature`. On the f
 
 **ATT&CK:** [T1053.005](https://attack.mitre.org/techniques/T1053/005/) Scheduled Task/Job: Scheduled Task
 
-**Data sources:** Security 4698/4702 (`SubjectLogonId`, `TaskName`, `TaskContent`) and the 4624 logon session behind that LogonId.
+**Data sources:** Security 4698/4702 (`SubjectLogonId`, `TaskName`, `TaskContent` on 4698 / `TaskContentNew` on 4702) and the 4624 logon session behind that LogonId.
 
 **Logic.** The rule matches the task event's `SubjectLogonId` to a logon session on the same
 host. It reports the task if that session is remote, meaning its 4624 had a real source
@@ -356,7 +359,7 @@ whose name ends in `C$` (for example `PUBLIC$`) is included by accident. CW-012'
 uses the same test. Payloads with other extensions
 (`.vbs`, `.hta`, `.msi`, `.sys`) are missed unless added to `extensions`.
 
-**Merging.** When CW-012 credits the same `ADMIN$` record to a remote-execution cluster
+**Merging.** When CW-012 credits the same `ADMIN$` or `C$` record to a remote-execution cluster
 of the same account and client, this finding is listed under the CW-012 one instead of
 standing alone (see "One event, one finding").
 
@@ -638,11 +641,13 @@ The rule works on Sysmon-only exports, Security-only exports, or both.
    no source.
 6. **Source host.** The source host is taken from the stdio pipe name. Renamed services that
    contain dashes are resolved against a main pipe seen on the host.
-7. **Telling it.** The summary and the story phrase name every credited drop, install and
-   task (tasks as created for 4698, updated for 4702, with their command), so findings merged
-   into this one lose nothing. A drop is told as "copied" only when its 5145 asks for write
-   access (`AccessMask` with WriteData `0x2` or AppendData `0x4`), otherwise as "accessed";
-   detection itself credits any access to an executable name.
+7. **Telling it.** The summary names the first credited drop, install and task and counts
+   the others ("(+N more)"); the story phrase names up to three drops and up to two installs
+   or tasks (tasks as created for 4698 or updated for 4702, with their command), then counts
+   the rest. A finding merged into this one stays listed in full under "also matched". A drop
+   is told as "copied" / "written to" only when its 5145 asks for write access (`AccessMask`
+   with WriteData `0x2` or AppendData `0x4`), otherwise as "accessed"; detection itself
+   credits any access to an executable name.
 
 **Severity.** The strongest pipe kind sets the base: tool -> high, control -> medium,
 random -> medium. Control plus corroboration -> high. The finding becomes **critical** for a

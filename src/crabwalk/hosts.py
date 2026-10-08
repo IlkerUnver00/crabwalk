@@ -68,6 +68,14 @@ def account_name(account: object) -> str:
     return str(account or "").strip().split("@", 1)[0].rsplit("\\", 1)[-1]
 
 
+def account_key(account: object) -> tuple[str, str | None]:
+    """(name, first label of its domain), lower-cased: CORP\\x, CORP.LOCAL\\x
+    and x@corp.local are one account; SRV01\\x (local) and CORP\\x are not."""
+    text = str(account or "").strip()
+    domain = text.rsplit("\\", 1)[0] if "\\" in text else (text.split("@", 1)[1] if "@" in text else "")
+    return account_name(text).lower(), domain.split(".", 1)[0].lower() or None
+
+
 def is_machine_account(account: object) -> bool:
     """Computer accounts end in '$' whatever form the log uses
     ('CORP\\PC01$', 'PC01$@CORP.LOCAL', 'PC01$')."""

@@ -19,9 +19,9 @@ from the bundled demo logs on every push.
 ![crabwalk HTML report](https://raw.githubusercontent.com/IlkerUnver00/crabwalk/main/docs/report-screenshot.png)
 
 *The `crabwalk hunt --report` output for the bundled demo logs (recordings from
-[EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)): what
-happened, step by step, with its own caveats, then the attack paths it reconstructed;
-below the fold, ATT&CK coverage, a per-host timeline and ranked findings.*
+[EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)): counts and
+severity, then what happened, step by step, with its own caveats, then the attack paths
+it reconstructed; below the fold, ATT&CK coverage, a per-host timeline and ranked findings.*
 
 ## Try it in 30 seconds
 
@@ -140,6 +140,8 @@ whose source machine is recovered from the target's own share-access log:
     PsExec-style stdio pipes: \blabla-NLLT108334-37048-stderr, ...; from 10.0.2.16;
     service 'blabla' (renamed) launched from host NLLT108334 (pid 37048);
     after 'blabla.exe' was written to \\*\ADMIN$
+    also matched CW-005 Executable on administrative share (high) 13:00:10Z, user IEWIN7\IEUser:
+    'blabla.exe' accessed on \\*\ADMIN$ from 10.0.2.16
 
 [HIGH] 2019-08-30 12:54:08Z  CW-006  Process spawned via WMI
     host: MSEDGEWIN10   user: MSEDGEWIN10\IEUser   ATT&CK: T1047
@@ -148,10 +150,11 @@ whose source machine is recovered from the target's own share-access log:
 
 **One event, one finding.** When another rule's finding already cites every
 record of a finding, claims its techniques at no lower severity, and names the
-same host, account, source and time, the smaller one is listed under it ("also
-matched") instead of as a second finding: the ADMIN$ drop CW-005 reports is the
-same record CW-012 credits to that PsExec run. Two rules that disagree about
-who did it, or from where, stay two findings.
+same host, account (domain-aware: a local `SRV01\x` is not `CORP\x`), source and
+time, the smaller one is listed under it ("also matched") instead of as a second
+finding: the ADMIN$ drop CW-005 reports is the same record CW-012 credits to that
+PsExec run. Two rules that disagree about who did it, or from where, stay two
+findings; so does a smaller finding that knows a source name the larger one lacks.
 
 ## The attack story
 
@@ -176,6 +179,7 @@ Path 1: NLLT108334 -> PC01.example.corp -> WIN-77LTAPHIQ1R.example.corp (also: I
   ...
   2019-03-18 11:06:29Z  on PC01.example.corp as EXAMPLE\user01: started a process with injected
       credentials (logon type 9 via seclogo: the sekurlsa::pth pattern)  [high CW-003]
+  2019-03-18 11:27:00Z  on PC01.example.corp as EXAMPLE\user01: cleared the Security log  [high CW-009]
   2019-03-18 11:27:23Z  PC01.example.corp -> WIN-77LTAPHIQ1R.example.corp as EXAMPLE\Administrator:
       used explicit credentials (4648) 3 times
   ...

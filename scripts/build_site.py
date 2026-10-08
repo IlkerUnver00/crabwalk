@@ -111,7 +111,7 @@ the story, attack paths, severity, ATT&amp;CK coverage, timeline and every findi
 hover or click a host to follow where the attacker came from and went next.</p></a>
 {navigator}
 <a class="card link" href="findings.json"><h2>findings.json</h2><p class="muted">The raw findings and
-the story, as <code>crabwalk hunt --out</code> writes them.</p></a>
+the story: the <code>findings</code> and <code>story</code> keys of <code>crabwalk hunt --out</code>.</p></a>
 </div>
 <section class="card">
 <h2>About this data</h2>

@@ -58,6 +58,18 @@ def test_a_drop_no_execution_follows_stays_a_finding():
     assert [f.rule_id for f in findings] == ["CW-005"] and not findings[0].merged
 
 
+def test_a_local_account_is_not_the_domain_account_of_the_same_name():
+    a, b = ev(5145), ev(5145)
+    local = finding("CW-005", [a], techniques=("T1021.002", "T1570"))
+    local.user = "SRV01\\Administrator"
+    domain = finding("CW-012", [a, b], severity="critical", techniques=("T1021.002", "T1570", "T1569.002"))
+    domain.user = "CORP\\Administrator"
+    assert len(merge_overlaps([local, domain])) == 2
+    dns = finding("CW-005", [a], techniques=("T1021.002", "T1570"))
+    dns.user = "CORP.LOCAL\\Administrator"  # the same domain account, DNS-style
+    assert len(merge_overlaps([dns, domain])) == 1
+
+
 def test_merging_needs_the_evidence_techniques_and_severity_all_covered():
     a, b, c = ev(5145), ev(5145), ev(7045, channel=SYSTEM)
     drop = finding("CW-005", [a], techniques=("T1021.002", "T1570"))

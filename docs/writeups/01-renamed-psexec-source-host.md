@@ -137,8 +137,8 @@ service is not `psexesvc`, the summary adds "(renamed)". The finding gets both `
 and `src_host` (from the pipe name). That pairing is what lets the graph merge
 `10.0.2.16` and `NLLT108334` into one node.
 
-CW-005 matches the same `blabla.exe` records on its own. CW-012 already cites
-them, maps them to T1570, and names the same host, account and address, so
+CW-005 matches the first of those `blabla.exe` records (16) on its own. CW-012
+already cites it, maps it to T1570, and names the same host, account and address, so
 crabwalk lists CW-005 under this finding ("also matched") instead of reporting
 one event twice. Had the two rules disagreed about who or where, they would
 have stayed two findings.
@@ -303,8 +303,9 @@ What this single log cannot prove:
 - **That anything ran.** 5145 records an access *check* for *requested* rights. A
   write mask on `blabla.exe` is not proof that bytes were written, and no record shows
   the service starting or the process it spawned. crabwalk also treats any access to
-  an executable name on `ADMIN$` as a drop when it correlates; only the story's wording
-  ("copied" or "accessed") looks at the mask.
+  an executable name on `ADMIN$` as a drop when it correlates; only the wording (the
+  story's "copied" or "accessed", the summary's "written to" or "accessed on") looks at
+  the mask.
 - **The source name is client-supplied.** `NLLT108334` comes from the client's pipe
   name. A modified tool could write any name there. The address 10.0.2.16 is better
   evidence, and NAT or a proxy would hide even that.

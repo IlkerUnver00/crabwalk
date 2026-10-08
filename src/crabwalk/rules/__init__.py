@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import timedelta
 
-from ..hosts import account_name, clean_ip, short_host
+from ..hosts import account_key, clean_ip, short_host
 from ..models import NormalizedEvent
 from .antiforensics import EventLogCleared
 from .base import SEVERITY_RANK, Finding, HuntContext, Rule, evidence_key
@@ -136,8 +136,8 @@ def _same_who_and_where(a: Finding, b: Finding) -> bool:
     """May ``b`` speak for ``a`` without losing an actor, a source or a time?"""
     if short_host(a.host) != short_host(b.host) or abs(a.timestamp - b.timestamp) > MERGE_WINDOW:
         return False
-    if a.user not in ("", "-") and account_name(a.user).lower() != account_name(b.user).lower():
-        return False
+    if a.user not in ("", "-") and account_key(a.user) != account_key(b.user):
+        return False  # domain-aware: a local SRV01\x is not the domain's CORP\x
     if a.src_ip and clean_ip(a.src_ip) != clean_ip(b.src_ip):
         return False
     if a.src_host and short_host(a.src_host) != short_host(b.src_host):

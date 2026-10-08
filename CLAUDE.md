@@ -20,7 +20,7 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   (cycle-closing edges skipped in time order). Exports DOT/JSON/SVG/standalone HTML.
 - Finding.src_ip/src_host: fill them whenever the evidence names the source; that is
   what turns a finding into a graph edge. Finding.action: a past-tense phrase without
-  host/time/user ("installed service 'x' (c:\x.exe)") — every rule sets it; the story
+  the finding's own host, time or user, which the story adds ("installed service 'x' (c:\x.exe)") — every rule sets it; the story
   is built from it. Say only what the record shows ("copied" needs a write AccessMask).
 - rules.merge_overlaps(): a finding whose records another rule's finding already cites
   (with ⊇ techniques, ≥ severity, same host/account/source, ≤10 min) goes into that

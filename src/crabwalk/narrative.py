@@ -26,7 +26,7 @@ from typing import Any
 from .graph import AttackGraph, GraphEdge, GraphNode, Movement, build_graph
 from .hosts import (
     ANONYMOUS_SID,
-    account_name,
+    account_key,
     classify_ip,
     clean_ip,
     is_anonymous,
@@ -44,7 +44,7 @@ NOTE_GAP = timedelta(days=1)  # a line this long after the previous one says so
 CAVEAT_GAP = timedelta(days=7)  # a path with a gap this long gets a caution before its steps
 PHRASES_PER_RULE = 2  # different phrases of one rule in a line before "and N more like them"
 MIN_YEAR = 2000  # earlier record times are FILETIME-null placeholders (1601)
-OTHER_HOSTS_SHOWN = 10  # console: hosts listed under "findings on other hosts"
+OTHER_HOSTS_SHOWN = 10  # console: hosts listed under "findings on hosts not on a path"
 PER_HOST_SHOWN = 3  # console and HTML: lines per such host
 
 #: (one, several) for a logon kind; "{n}" is the count.
@@ -161,7 +161,7 @@ class Story:
             lines += [f"  CAUTION: {note}" for note in chapter.notes]
             lines += [f"  {_when(b)}  {_line(b, '->')}{_tag(b)}" for b in chapter.beats]
         if self.other:
-            lines += ["", "Findings on other hosts (the logs do not show where this activity came from):"]
+            lines += ["", "Findings on hosts not on a path (no reconstructed step leads to them):"]
             for activity in self.other[:OTHER_HOSTS_SHOWN]:
                 lines += [f"  {_when(b)}  {_line(b, '->')}{_tag(b)}" for b in activity.beats[:PER_HOST_SHOWN]]
                 if len(activity.beats) > PER_HOST_SHOWN:
@@ -180,9 +180,9 @@ class Story:
             out += [f"> **Caution:** {_md(note)}\n" for note in chapter.notes]
             out += [f"- **{_when(b)}** {_md(_line(b))}{_md_tag(b)}" for b in chapter.beats]
         if self.other:
-            out += ["", "## Findings on other hosts", "",
-                    "*The logs do not show where this activity came from, so these hosts are not on a path.*",
-                    ""]
+            out += ["", "## Findings on hosts not on a path", "",
+                    "*No reconstructed step leads to these hosts; each line says what its records "
+                    "show about where the activity came from.*", ""]
             for activity in self.other:
                 out += [f"- **{_when(b)}** {_md(_line(b))}{_md_tag(b)}" for b in activity.beats]
         return "\n".join(out) + "\n"
@@ -198,9 +198,9 @@ class Story:
             parts += [f'<p class="story-note"><b>Caution:</b> {_esc(n)}</p>' for n in chapter.notes]
             parts.append(_html_beats(chapter.beats))
         if self.other:
-            parts.append("<h3>Findings on other hosts</h3>")
-            parts.append('<p class="muted story-lead">The logs do not show where this activity came '
-                         "from, so these hosts are not on a path.</p>")
+            parts.append("<h3>Findings on hosts not on a path</h3>")
+            parts.append('<p class="muted story-lead">No reconstructed step leads to these hosts; each '
+                         "line says what its records show about where the activity came from.</p>")
             for activity in self.other:
                 shown = activity.beats[:PER_HOST_SHOWN]
                 parts.append(_html_beats(shown))
@@ -331,11 +331,7 @@ class _Accounts:
         return tuple(out.values())
 
 
-def _name_key(user: str) -> tuple[str, str | None]:
-    """(account name, first label of its domain), lower-cased."""
-    text = str(user or "").strip()
-    domain = text.rsplit("\\", 1)[0] if "\\" in text else (text.split("@", 1)[1] if "@" in text else "")
-    return account_name(text).lower(), domain.split(".", 1)[0].lower() or None
+_name_key = account_key
 
 
 # --------------------------------------------------------------------------
