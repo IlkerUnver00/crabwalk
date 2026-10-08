@@ -1,6 +1,6 @@
 # crabwalk detection reference
 
-This reference covers crabwalk's twelve detection rules: what each one reads, the logic it
+This reference covers crabwalk's fifteen detection rules: what each one reads, the logic it
 runs, how it sets severity, what you can tune, where it is noisy or blind, and which tests
 prove it. It describes the code in the commit that contains this version of the file, and
 every count below was produced there. The sources are `src/crabwalk/rules/*.py`,
@@ -17,27 +17,36 @@ matching single records. Many cataloged IDs feed no rule yet:
   password spraying and brute force produce no finding), 4699-4701, 4720/4726, 5140 and
   4778/4779.
 - System 7036/7040, TS-LSM 22/23/24, RCM 1149, RdpCoreTS 131.
-- WinRM 6/168, WMI-Activity 5857-5861, PowerShell 4103, Windows PowerShell 400/403, Sysmon 3.
+- WinRM 6/168, WMI-Activity 5857-5861, PowerShell 4103, Windows PowerShell 400/403.
 
 They appear in `parse` output, never in findings. Security 4634/4647 only set session end
-times, and 4648 only adds an outbound edge to the session graph.
+times, and 4648 only adds an outbound edge to the session graph. Sysmon 3 is never a
+finding of its own: CW-013 to CW-015 read it to name the other end of a connection.
+Sysmon 11 and 13 are kept only for the content the rules use (a file created in a
+Startup folder, a service `ImagePath` write), because both fire for every file or
+registry write on a busy host.
 
 ## How the rules are validated
 
-- **Unit tests** (`tests/test_rules.py`, `tests/test_pipes.py`, `tests/test_config.py`) run
-  each rule on synthetic events. `pytest tests`: 381 passed.
+- **Unit tests** (`tests/test_rules.py`, `tests/test_pipes.py`, `tests/test_dcom.py`,
+  `tests/test_remote_files.py`, `tests/test_config.py`) run each rule on synthetic events.
+  `pytest tests`: 444 passed.
 - **Ground-truth corpus** (`tests/test_corpus.py`) runs over
   [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES) (GPL-3.0, not
-  vendored, under `samples/EVTX-ATTACK-SAMPLES`). `GROUND_TRUTH` has 16 (file, technique,
+  vendored, under `samples/EVTX-ATTACK-SAMPLES`). `GROUND_TRUTH` has 22 (file, technique,
   rule) entries whose filenames name the technique or the behaviour the rule keys on (CW-006
-  is the exception; see its section). `NEGATIVE_TRUTH` has 4 files of *other* attacker
+  is the exception; see its section). `NEGATIVE_TRUTH` has 7 files of *other* attacker
   activity on which a rule must stay silent. Each entry is hunted **one file at a time**,
   and a finding merged under another rule's still counts as that rule firing, both ways.
-  `pytest tests/test_corpus.py`: 26 passed.
+  `pytest tests/test_corpus.py`: 35 passed.
 - **Whole-corpus run.** `crabwalk hunt samples/EVTX-ATTACK-SAMPLES` covers 278 files and
-  37,364 records (0 unparsable) and yields 72 findings (4 critical, 51 high, 17 medium),
+  37,364 records (0 unparsable) and yields 76 findings (4 critical, 56 high, 16 medium),
   after two CW-005 matches are merged into the CW-012 findings that cite them.
   CW-001, CW-002 and CW-010 produce **zero** of them.
+- **A second, unseen corpus.** [BENCHMARK.md](BENCHMARK.md#a-second-corpus-the-rules-never-saw)
+  runs the rules over
+  [EVTX-to-MITRE-Attack](https://github.com/mdecrevoisier/EVTX-to-MITRE-Attack), which none
+  of them was written against, and lists what that run changed here.
 
 **Policy on cross-file correlation.** The whole-corpus run hunts all files together, so
 events from separately captured samples of the same host can correlate. Such joins are
@@ -67,6 +76,26 @@ Several rules use the same derived state, built in `sessions.py` and `rules/base
   `\Users\Public\`, or a name or image matching `psexe|paexec|remcom|csexec|winexe`.
 - **Machine accounts** are names that end in `$` in any notation (`CORP\PC01$`,
   `PC01$@CORP.LOCAL`).
+- **Where a spawned process came from.** WMI, WinRM and DCOM start the requested process in
+  the caller's own network logon session. CW-006, CW-007 and CW-013 look up the process's
+  session (Sysmon 1 `LogonId`; on a 4688 `TargetLogonId`, else `SubjectLogonId`) and take
+  its address and workstation as the finding's source when its 4624 was logged with a
+  remote address, as a network logon (type 3 or 8), and the session was alive at the spawn
+  (LogonIds repeat across boots). A process in an RDP session (type 10) is a person working
+  on this host: a WMI or COM call they make there is local and names no source. CW-015 is
+  the one rule that takes an RDP session (type 10 or 7), because `\\tsclient` only exists
+  inside one.
+- **The other end of a connection.** Sysmon 3 does not put this host's address in a fixed
+  field on inbound connections: in the corpus an inbound SMB connection is logged with this
+  host as `SourceIp` in one file and as `DestinationIp` in another. `connection_peer()` in
+  `rules/base.py` decides which side is this host from the record itself (the side whose
+  `SourceHostname`/`DestinationHostname` is this host; the source of a connection the host
+  initiated; on an inbound one, the only side on 135, 139, 445, 3389, 5985 or 5986), then
+  from the addresses this host is seen using in its other Sysmon 3 records within a day
+  (DHCP hands addresses on). When none of that settles it, the connection names no peer.
+  The peer's name is the host name Sysmon resolved for that side, when it gives one. The
+  rules use only connections in the direction their story needs (the caller connecting in,
+  or the RDP client connecting out), and cite a connection only when it names the source.
 
 **Severity levels** are `critical`, `high` and `medium`. No rule emits `low`. Findings that
 are identical in (rule, time, host, user, summary) are collapsed.
@@ -101,7 +130,11 @@ installs, tasks and drops.
 Every table must name at least one field that says what a record is: `ServiceName`,
 `ImagePath`, `ServiceFileName`, `RelativeTargetName`, `PipeName`, `TargetObject`, `Details`,
 `TaskName`, `TaskContent`, `TaskContentNew`, `CommandLine`, `NewProcessName`, `Hashes`,
-`OriginalFileName`, `ScriptBlockText`, `Properties`, `ObjectName`, `Channel` or `BackupPath`.
+`OriginalFileName`, `TargetFilename`, `ScriptBlockText`, `Properties`, `ObjectName`, `Channel`
+or `BackupPath`. A Sysmon 3 connection carries none of them: it says who talked to whom, not
+what was done. A finding that cites one (CW-013 to CW-015 cite the connection that names
+their source) is never matched by a `fields` entry; allowlist it with `users`, `hosts` and
+`sources`.
 Other fields (who and where, such as `SubjectUserName`, `User`, `IpAddress`; process context
 such as `Image`; per-type constants such as `ObjectType` or `AccountName = LocalSystem`)
 appear on many kinds of record, so they may only narrow such a table. A table without one is
@@ -238,12 +271,19 @@ The rule has two branches:
    outbound user name. This event is logged on the host where the hash was *used*, not on the
    target.
 2. **Privileged NTLM network logon:** `LogonType` 3, package `NTLM`, and a 4672 seen for the
-   same LogonId on the same host. This branch is controlled by `privileged_ntlm`.
+   same LogonId on the same host. This branch is controlled by `privileged_ntlm`. Tools
+   open a new session per operation, so one run leaves a burst of such logons: those from
+   one source address (or, without one, one workstation name), as one account, on one host,
+   each within `burst_gap` of the previous, are **one** finding citing all of them ("14
+   privileged NTLM network logons from 10.23.123.11 over 8 s"). The workstation name is
+   whatever the client sends: impacket's logons in both corpora leave it blank, and a
+   Metasploit `ms17_010_psexec` recording sends a made-up 16-character one. So the finding
+   names a source host only when every logon in the burst gives the same name.
 
 **Severity:** high for the signature branch, medium for the NTLM branch.
 
-**Tunables:** `privileged_ntlm = true`. Setting it to `false` keeps the signature branch and
-drops the NTLM branch.
+**Tunables:** `privileged_ntlm = true`, `burst_gap = "10m"`. Setting `privileged_ntlm` to
+`false` keeps the signature branch and drops the NTLM branch.
 
 ```toml
 [[allow]]
@@ -261,7 +301,7 @@ On the corpus it also fires on
 `Privilege Escalation/security_4624_4673_token_manip.evtx`,
 `Privilege Escalation/Invoke_TokenDuplication_UAC_Bypass4624.evtx` and
 `Credential Access/tutto_malseclogon.evtx`. Branch 2 fires on any admin tool that falls back
-to NTLM. On the corpus it gives 7 medium findings in 3 files, none of them PtH samples.
+to NTLM. On the corpus it gives 5 medium findings in 3 files, none of them PtH samples.
 
 **Blind spots.** Pass-the-hash seen only from the target side looks like an ordinary NTLM
 network logon. If 4672 is missing or `privileged_ntlm = false`, that case is not reported.
@@ -273,9 +313,12 @@ On the target, overpass-the-hash appears as a Kerberos network logon, which the 
 does not cover. Pass-the-ticket is not covered.
 
 **Validation.** `GROUND_TRUTH`: `Lateral Movement/LM_4624_mimikatz_sekurlsa_pth_source_machine.evtx`
-(T1550.002). Unit tests: `test_pth_seclogo_logon_type_9`, `test_pth_privileged_ntlm_needs_4672`.
+(T1550.002). Unit tests: `test_pth_seclogo_logon_type_9`, `test_pth_privileged_ntlm_needs_4672`,
+`test_pth_burst_of_privileged_ntlm_logons_is_one_finding`,
+`test_pth_bursts_split_on_gap_source_and_account`.
 Config test: `test_privileged_ntlm_switch_keeps_the_seclogo_signature`. On the full corpus:
-11 findings (4 high, 7 medium).
+9 findings (4 high, 5 medium). The burst grouping came from the second corpus, where one
+run of 14 logons on one host in 8 seconds gave 14 findings that differed only in their time.
 
 ## CW-004: Scheduled task created from remote session
 
@@ -379,7 +422,9 @@ findings, leaving 6 findings, 5 of them in `Lateral Movement/LM_5145_Remote_File
 **Data sources:** Sysmon 1 (`ParentImage`, `Image`, `CommandLine`, `User`) and Security 4688 (`ParentProcessName`, `NewProcessName`, `CommandLine`; the user is `TargetUserName`/`TargetDomainName`, the account the process runs as, when the event has them, else `SubjectUserName`/`SubjectDomainName`).
 
 **Logic.** Every process whose parent's file name is `wmiprvse.exe`. The summary shows
-`CommandLine`, or the child's file name when there is no command line.
+`CommandLine`, or the child's file name when there is no command line. The source is the
+remote network logon the process runs in, when its 4624 was logged (see "Where a spawned
+process came from").
 
 **Severity:** high when the child is one of `cmd.exe`, `powershell.exe`, `pwsh.exe`,
 `wscript.exe`, `cscript.exe`, `rundll32.exe`, `regsvr32.exe` or `mshta.exe`. Medium otherwise.
@@ -407,9 +452,13 @@ WMI-based inventory and local WMI event consumers all fire. On the corpus,
 `Persistence/sysmon_20_21_1_CommandLineEventConsumer.evtx` is persistence rather than
 movement.
 
-**Blind spots.** No source host is recorded, so the finding is not drawn as a graph edge.
-WMI-Activity 5857-5861 are cataloged but unused. WMI execution that does not create a process
-as a child of WmiPrvSE is not visible.
+**Blind spots.** Without the 4624 of the caller's session (a Sysmon-only export, or one
+host's Security log cut before the logon) no source is recorded, so the finding is not drawn
+as a graph edge. On the corpus only
+`Privilege Escalation/NTLM2SelfRelay-med0x2e-security_4624_4688.evtx` has one: its process
+runs in a Kerberos network logon from 192.168.1.219. WMI-Activity 5857-5861 are
+cataloged but unused. WMI execution that does not create a process as a child of WmiPrvSE is
+not visible.
 
 **Validation.** `GROUND_TRUTH`: `Credential Access/sysmon_10_1_memdump_comsvcs_minidump.evtx`
 (T1047). That sample is a credential-dumping capture, not a WMI lateral-movement one. It
@@ -417,8 +466,9 @@ proves the rule only because WMI is the launcher there: WmiPrvSE starts
 `rundll32 C:\windows\system32\comsvcs.dll, MiniDump ...`. The impacket wmiexec sample
 `Lateral Movement/LM_wmiexec_impacket_sysmon_whoami.evtx` is **not** a `GROUND_TRUTH` entry.
 Hunted on its own, it gives 3 high CW-006 findings such as
-`cmd.exe /Q /c whoami /all 1> \\127.0.0.1\ADMIN$\__... 2>&1`. Unit test:
-`test_wmi_spawned_shell_is_high`. On the full corpus: 15 findings in 8 files.
+`cmd.exe /Q /c whoami /all 1> \\127.0.0.1\ADMIN$\__... 2>&1`. Unit tests:
+`test_wmi_spawned_shell_is_high`, `test_wmi_child_takes_its_source_from_the_network_logon`.
+On the full corpus: 15 findings in 8 files.
 
 ## CW-007: Remote execution via WinRM
 
@@ -426,9 +476,10 @@ Hunted on its own, it gives 3 high CW-006 findings such as
 
 **Data sources:** Sysmon 1 and Security 4688 (same fields as CW-006), and WinRM/Operational 91 (System `UserID`).
 
-**Logic.** There are two branches. (1) Every child process of `wsmprovhost.exe`, handled the
-same way as CW-006. (2) Every WinRM event 91 (shell created on this host), reported with the
-event's user SID.
+**Logic.** There are two branches. (1) Every child process of `wsmprovhost.exe` (PowerShell
+remoting) or `winrshost.exe` (`winrs`, Windows Remote Shell over WinRM), handled the same way
+as CW-006, source included. (2) Every WinRM event 91 (shell created on this host), reported
+with the event's user SID.
 
 **Severity:** high for a shell child (same list as CW-006), medium otherwise, and medium for
 event 91. **Tunables:** none.
@@ -448,9 +499,11 @@ For event 91 the finding's user is a SID, so a `users` pattern must be the SID.
 168 are not used.
 
 **Validation.** `GROUND_TRUTH`: `Lateral Movement/LM_PowershellRemoting_sysmon_1_wsmprovhost.evtx`
-(T1021.006). Unit test: `test_winrm_shell_event`. On the full corpus: 2 findings. The second
-is `Lateral Movement/LM_winrm_target_wrmlogs_91_wsmanShellStarted_poorLog.evtx`, which is not
-a ground-truth entry.
+and `Lateral Movement/LM_winrm_exec_sysmon_1_winrshost.evtx` (T1021.006). Unit tests:
+`test_winrm_shell_event`, `test_winrs_shell_is_winrm`. On the full corpus: 3 findings. The
+third is `Lateral Movement/LM_winrm_target_wrmlogs_91_wsmanShellStarted_poorLog.evtx`, which
+is not a ground-truth entry. The `winrshost.exe` branch closes a gap the
+[benchmark](BENCHMARK.md) found: both rule engines flagged the winrs sample, crabwalk did not.
 
 ## CW-008: Suspicious PowerShell script block
 
@@ -503,7 +556,13 @@ full corpus: 2 findings.
 
 **Data sources:** Security 1102 and System 104 (`SubjectUserName`/`SubjectDomainName`; for 104 also `Channel` or `BackupPath`).
 
-**Logic.** Every such event is a finding. **Severity:** high, always. **Tunables:** none.
+**Logic.** Every such event is a clear. A tool that clears every log (`wevtutil cl` in a loop)
+leaves one record per channel, so clears on one host by one account, each within
+`burst_gap` of the previous, are **one** finding that lists the channels ("cleared 89 event
+logs (Application, ForwardedEvents, HardwareEvents and 86 more)"). The same clear kept in two
+exports (same time and channel) counts once. **Severity:** high, always.
+
+**Tunables:** `burst_gap = "1m"`.
 
 ```toml
 [[allow]]
@@ -523,8 +582,12 @@ EventLog service, deleting `.evtx` files offline, or tampering with individual r
 in the record sequence are not analyzed.
 
 **Validation.** `GROUND_TRUTH`: `Defense Evasion/DE_1102_security_log_cleared.evtx` and
-`Defense Evasion/DE_104_system_log_cleared.evtx` (both T1070.001). Unit test:
-`test_log_cleared_and_dedup`. On the full corpus: 26 findings.
+`Defense Evasion/DE_104_system_log_cleared.evtx` (both T1070.001). Unit tests:
+`test_log_cleared_and_dedup`, `test_clearing_every_log_at_once_is_one_finding`. On the full
+corpus: 24 findings. Two of them group clears of one host from two files: those two
+ground-truth samples (PC01, System then Security 41 s later) and two Zerologon captures of
+one host (`01566s-win16-ir`, 13 s apart). The grouping came from the second corpus, where one file's 91 clears (a System and a
+Security clear minutes apart, then 89 channels within 3 s) gave 91 findings; it now gives 3.
 
 ## CW-010: Kerberoasting (RC4 service ticket)
 
@@ -638,9 +701,16 @@ The rule works on Sysmon-only exports, Security-only exports, or both.
    (Sysmon 18, Image not `System`), a stdio pipe naming this host, or a loopback-only 5145.
    With local evidence and no signature pipe driven from another machine, the finding is
    titled "Local execution through a remote-exec tool's pipes" and carries no T1021.002 and
-   no source.
+   no source. PsExec run against its own host (`PsExec -s -i cmd`) reaches its service pipe
+   over SMB loopback, which Sysmon logs as a `System` connect, while the client opens the
+   stdio pipes itself. So each local run whose stdio pipes are opened locally and name this
+   host excuses one connect: the address-less `System` connect to its service pipe closest
+   before its first local stdio connect, within `skew`. Every other `System` connect to that
+   pipe, and any a 5145 ties to a remote client, still makes the cluster remote.
 6. **Source host.** The source host is taken from the stdio pipe name. Renamed services that
-   contain dashes are resolved against a main pipe seen on the host.
+   contain dashes are resolved against a main pipe seen on the host. A remote finding takes
+   it only from stdio pipes that no local process opened and that do not name this host, so
+   a local run next to a remote one never makes the target its own source.
 7. **Telling it.** The summary names the first credited drop, install and task and counts
    the others ("(+N more)"); the story phrase names up to three drops and up to two installs
    or tasks (tasks as created for 4698 or updated for 4702, with their command), then counts
@@ -710,8 +780,15 @@ legitimate PsExec use is reported as high or critical. Software that names its p
   `DE_renamed_psexec_service_sysmon_17_18.evtx` and
   `Privilege Escalation/sysmon_privesc_psexec_dwell.evtx`, the finding is titled local, has
   no T1021.002 and no source.
-- Unit tests: the 26 test functions in `tests/test_pipes.py` (concurrent clients, poller
-  ticks, enumeration, local vs remote, Sysmon/5145 merging).
+- Unit tests: the 30 test functions in `tests/test_pipes.py` (concurrent clients, poller
+  ticks, enumeration, local vs remote, Sysmon/5145 merging). Four of them,
+  `test_psexec_against_its_own_host_over_smb_loopback_is_local`,
+  `test_a_remote_client_on_the_service_pipe_is_not_excused_as_loopback`,
+  `test_a_local_run_excuses_only_its_own_loopback_connect` and
+  `test_a_remote_run_beside_a_local_one_takes_its_own_source_host`, come from the second
+  corpus: its `PSexec as system execution` sample was reported as critical lateral
+  movement. In the first corpus's local sample the service was renamed (`svchost`), so its
+  loopback connect never matched a tool pipe and the gap stayed hidden.
 - On the full corpus: 8 findings (3 critical, 2 high, 3 medium). Both HIGH findings draw
   evidence from two corpus files of host `WIN-77LTAPHIQ1R`:
   - "svcctl, then install of `remotesvc`" joins the Security 5145 in
@@ -721,6 +798,196 @@ legitimate PsExec use is reported as high or critical. Software that names its p
   - "atsvc, then task `\CYAlyNSS`" lists the same 4698 twice, from
     `LM_ScheduledTask_ATSVC_target_host.evtx` and `Execution/temp_scheduled_task_4698_4699.evtx`.
     The ATSVC sample is HIGH on its own; the second file only adds a duplicate copy.
+
+## CW-013: Execution through DCOM
+
+**ATT&CK:** [T1021.003](https://attack.mitre.org/techniques/T1021/003/) Remote Services: Distributed Component Object Model
+
+**Data sources:** Sysmon 1 (`Image`, `CommandLine`, `ParentImage`, `ParentCommandLine`, `ProcessId`, `ParentProcessId`, `LogonId`) and Security 4688 (`NewProcessName`, `ParentProcessName`, `CommandLine`, `NewProcessId`, `ProcessId`, logon IDs); for the source, the 4624 of the process's logon session, else inbound Sysmon 3 connections of the COM server process.
+
+**Logic.** Remote DCOM activation starts the COM server under `svchost.exe -k DcomLaunch`
+with `-Embedding` on its command line. The servers the rule knows are `mmc.exe`
+(MMC20.Application), `mshta.exe` (htafile), `excel.exe`, `winword.exe` and `outlook.exe`.
+It reports:
+
+1. **A child of an activated COM server.** On Sysmon 1 the parent's `ParentCommandLine`
+   contains `-Embedding`. A 4688 has no parent command line, so there only `mmc.exe`
+   spawning a shell counts: Office spawning one is as often a local macro.
+2. **The activation itself.** For `mshta.exe -Embedding` started by `svchost.exe` always:
+   that runs an HTA (the LethalHTA technique), with or without a child. For the other
+   servers only when the server runs in a remote caller's network logon, which is what
+   remote activation does; without that logon, an activation says nothing on its own.
+
+The source is the network logon the process runs in (see "Where a spawned process came
+from"). Without one, the rule reads the COM server process's **inbound** Sysmon 3
+connections: same host and process ID (Sysmon `ProcessId`; on a 4688 the server's ID is
+`NewProcessId` for the activation and the creator's `ProcessId` for a child), from the
+server's start (or `peer_window` before the event when its start is not logged) to
+`peer_window` after the event. When they name exactly one remote peer, that is the source,
+with the host name Sysmon resolved for it, and those connections are cited. A connection the
+server opened itself (an HTA fetching its payload) is never taken as its caller.
+
+**Severity:** high for a shell child (the CW-006 list) and for an activation, medium for any
+other child.
+
+**Tunables:** `peer_window = "1m"`.
+
+```toml
+[[allow]]
+reason = "Reporting server drives Excel on the finance hosts over DCOM"
+rules = ["CW-013"]
+sources = ["10.0.5.30"]
+hosts = ["FIN*"]
+```
+
+Legitimate remote use of these COM objects to start processes is rare, so this entry
+narrows by who and where only. When the finding cites a Sysmon 3 connection, a `fields`
+entry cannot match it (see "Allowlisting").
+
+**False positives.** Office automation driven from another host (reporting, document
+generation). A child of a server activated locally with `-Embedding`, for example a local
+script driving `MMC20.Application` that starts a shell, is reported too, with no source.
+A local maldoc that reaches mshta through `ShellBrowserWindow` does not match: explorer.exe
+starts that mshta, without `-Embedding`. COM use inside an RDP session names no source.
+
+**Blind spots.** `ShellWindows` and `ShellBrowserWindow` run their command inside the
+existing `explorer.exe`, so a child of explorer.exe is indistinguishable from the user's
+own; the corpus sample of them has only Sysmon 3 records and stays silent. Other COM
+objects used for lateral movement (Visio, third-party servers) are not in the list. A failed
+activation (System 10016) is not reported. The source side of a DCOM call (a PowerShell
+script block creating `MMC20.Application` on another host) is not detected, only the target.
+
+**Validation.** `GROUND_TRUTH`: `Lateral Movement/LM_impacket_docmexec_mmc_sysmon_01.evtx` and
+`Lateral Movement/LM_DCOM_MSHTA_LethalHTA_Sysmon_3_1.evtx` (T1021.003). `NEGATIVE_TRUTH`:
+`Other/maldoc_mshta_via_shellbrowserwind_rundll32.evtx`. Unit tests in `tests/test_dcom.py`
+cover children and activations on Sysmon and 4688, process IDs on both logs, the direction
+and window of the peer connection, its host name, local and RDP-session COM use, and LogonIds
+reused across boots. On the full corpus: 4 findings in those two files (3 for the three
+impacket commands, source `10.0.2.19`; 1 for LethalHTA, source `10.0.2.17`). The rule closes
+the DCOM gap the [benchmark](BENCHMARK.md) found. Its activation branch came from the second
+corpus, whose MMC20 sample shows the activation in a logon from `10.23.123.11` and no child.
+
+## CW-014: Startup folder written from another host
+
+**ATT&CK:** [T1547.001](https://attack.mitre.org/techniques/T1547/001/) Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder; over SMB also [T1021.002](https://attack.mitre.org/techniques/T1021/002/) and [T1570](https://attack.mitre.org/techniques/T1570/) Lateral Tool Transfer; over RDP [T1021.001](https://attack.mitre.org/techniques/T1021/001/) Remote Desktop Protocol
+
+**Data sources:** Sysmon 11 (`Image`, `TargetFilename`), kept at parse time only for files in a Startup folder; Security 5145 (`ShareName`, `RelativeTargetName`, `AccessMask`, `IpAddress`, subject account); Sysmon 3 for the source.
+
+**Logic.** A file created in a Startup folder runs at the next logon. A Startup folder is
+`...\Start Menu\Programs\Startup\` under a profile or ProgramData, also written with its 8.3
+short names (`STARTM~1`). The rule reports one written by another machine:
+
+1. **Over SMB.** A Sysmon 11 whose writer is the SMB server (`Image` `System`, or
+   `<unknown process>`), or a 5145 on any share but `IPC$` that asks for write access (as in
+   CW-012) to a path in a Startup folder from a non-loopback address. A 5145 names its
+   client in `IpAddress`. For a Sysmon 11 alone the source is the one remote peer of the
+   **inbound** connections on port 445 within `peer_window` of the write; with several,
+   none is named and all are listed. If those connections are all loopback
+   (`\\localhost\C$`), a process on this host wrote the file and there is no finding.
+2. **Over RDP.** A Sysmon 11 written by `mstsc.exe`: the RDP client writing a file that the
+   server it is connected to pushed through the client's shared drive (`\\tsclient`). The
+   movement runs from that server back to this client. The source is the server of the
+   latest **outbound** `mstsc.exe` connection on port 3389 within `rdp_window` before the
+   write.
+
+The records of one copy (several 5145 access checks, the Sysmon 11) are one finding: same
+host, same channel (SMB or RDP), same file in the same profile's Startup folder, each within
+`peer_window` of the previous. The finding names whose folder it is (`bob's`, `the
+all-users`, or `a` when the path is in neither layout).
+
+**Severity:** high, always.
+
+**Tunables:** `peer_window = "1m"`, `rdp_window = "12h"`.
+
+```toml
+[[allow]]
+reason = "Login-script server copies the helpdesk shortcut into Startup folders over C$"
+rules = ["CW-014"]
+sources = ["10.0.5.40"]
+[[allow.fields]]                    # the 5145 write on C$
+RelativeTargetName = '^Users\\[^\\]+\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Helpdesk\.lnk$'
+[[allow.fields]]                    # the Sysmon 11 of the same copy, on hosts that log it
+Image = '^System$'
+TargetFilename = '^C:\\Users\\[^\\]+\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\Helpdesk\.lnk$'
+```
+
+One copy's 5145 and Sysmon 11 are one finding, so the entry needs a table for each. When a
+host logs only Sysmon 11, the finding also cites the inbound SMB connection that names the
+source, which no table can describe, so this entry keeps it; allowlist that case with
+`sources` and `hosts`.
+
+**False positives.** Deployment tools and login scripts that copy shortcuts into Startup
+folders over the network. A file server that stores roaming profiles or redirected folders:
+every profile sync over SMB writes there. A user copying a file into their own Startup
+folder while connected over RDP with drive redirection.
+
+**Blind spots.** Sysmon logs 11 only for paths its configuration's `FileCreate` rules
+include. Other autostart locations (Run keys written over remote registry, scheduled tasks)
+are not this rule. Without a write-access 5145 or a Sysmon 11, a file copied into a Startup
+folder leaves nothing for it to read.
+
+**Validation.** `GROUND_TRUTH`: `Lateral Movement/lateral_movement_startup_3_11.evtx`
+(T1547.001, source `10.0.2.17`, named `MSEDGEWIN10CLON` by Sysmon) and
+`Lateral Movement/LM_tsclient_startup_folder.evtx` (T1021.001). `NEGATIVE_TRUTH`:
+`AutomatedTestingTools/PanacheSysmon_vs_AtomicRedTeam01.evtx` and
+`Defense Evasion/sysmon_2_11_evasion_timestomp_MACE.evtx`, where local `powershell.exe` and
+`cmd.exe` write into Startup folders. Unit tests in `tests/test_remote_files.py` cover the
+parse-time filter, 8.3 names, both channels, one finding per copy, folder owners, loopback and
+outbound SMB, and the peer's name. On the full corpus: 2 findings, the two ground-truth files.
+
+## CW-015: Program run from an RDP client's drive
+
+**ATT&CK:** [T1021.001](https://attack.mitre.org/techniques/T1021/001/) Remote Services: Remote Desktop Protocol; [T1570](https://attack.mitre.org/techniques/T1570/) Lateral Tool Transfer
+
+**Data sources:** Sysmon 1 (`Image`, `CommandLine`, `LogonId`) and Security 4688 (`NewProcessName`, `CommandLine`); for the source, the 4624 of the process's RDP session, else Sysmon 3.
+
+**Logic.** A process whose image or command line points into the drive the connecting RDP
+client shares with this host: `\\tsclient\...`, which a 4688 logs as
+`\Device\Mup\tsclient\...`. The program sits on the client and runs on this host, which is
+how SharpRDP and similar tools move a binary over RDP. When only the command line points
+there (a local `cmd` copying from it), the finding says so. The source is the RDP session
+the process runs in (logon type 10 or 7) or, without one, the peer of the latest **inbound**
+connection on port 3389 within `rdp_window` before it, with the name Sysmon resolved for it.
+
+**Severity:** medium, always: an administrator running a tool from their own drive looks the
+same.
+
+**Tunables:** `rdp_window = "12h"`.
+
+```toml
+[[allow]]
+reason = "Helpdesk runs the support tool from their own drive over RDP"
+rules = ["CW-015"]
+users = ["CORP\\helpdesk1"]
+[[allow.fields]]                    # Sysmon 1
+Image = '^\\\\tsclient\\c\\Tools\\support\.exe$'
+CommandLine = '^"?\\\\tsclient\\c\\Tools\\support\.exe"? ?$'
+[[allow.fields]]                    # Security 4688
+NewProcessName = '^\\Device\\Mup\\tsclient\\c\\Tools\\support\.exe$'
+CommandLine = '^"?\\\\tsclient\\c\\Tools\\support\.exe"? ?$'
+```
+
+Each table pins the binary as well as the command line: a command line alone can be set to
+any value by whoever starts the process. The optional trailing space is how Sysmon logs a
+program Explorer starts with no arguments.
+
+On a Sysmon-only host where the source comes from a Sysmon 3 connection, the finding cites
+that connection and this entry keeps it; allowlist that case with `users`, `hosts` and
+`sources`.
+
+**False positives.** Administrators and helpdesk staff running tools from their own drive.
+
+**Blind spots.** A binary copied from `\\tsclient` to a local path first and run from there
+is caught only through the copy's command line. On a server with several RDP sessions at
+once, the latest inbound connection may belong to another session; the logon session, when
+logged, settles it.
+
+**Validation.** `GROUND_TRUTH`: `Lateral Movement/LM_sysmon_1_12_13_3_tsclient_SharpRdp.evtx`
+(T1021.001, source `192.168.56.1`, named `LAPTOP-JU4M3I0E` by Sysmon). Unit tests in
+`tests/test_remote_files.py` cover Sysmon and 4688 paths, the RDP-connection direction and a
+local program handed a `\\tsclient` path. On the full corpus: 1 finding, that file. The other
+SharpRDP sample (`LM_sysmon_3_12_13_1_SharpRDP.evtx`) types its command into the Run dialog
+and stays silent.
 
 ---
 
@@ -734,9 +1001,12 @@ legitimate PsExec use is reported as high or critical. Software that names its p
 | CW-004 | T1053.005 | Security 4698, 4702 + 4624 | Yes |
 | CW-005 | T1021.002, T1570 | Security 5145 (ADMIN$/C$) | Yes |
 | CW-006 | T1047 | Sysmon 1, Security 4688 | Yes (via a credential-dumping sample) |
-| CW-007 | T1021.006 | Sysmon 1, Security 4688, WinRM 91 | Yes |
+| CW-007 | T1021.006 | Sysmon 1, Security 4688, WinRM 91 | Yes (wsmprovhost and winrshost) |
 | CW-008 | T1059.001 | PowerShell 4104 | Yes |
 | CW-009 | T1070.001 | Security 1102, System 104 | Yes |
 | CW-010 | T1558.003 | Security 4769 (DC) | No (unit tests only) |
 | CW-011 | T1003.006 | Security 4662 (DC) | Yes |
 | CW-012 | T1021.002 (remote only); T1569.002 (tool pipe, svcctl/ntsvcs, install); +T1543.003, T1053.005, T1570 by corroboration | Sysmon 17/18, Security 5145 (IPC$), + installs, 4698/4702, 5145 drops | Yes (6 positive, 4 negative) |
+| CW-013 | T1021.003 | Sysmon 1, Security 4688 (+ 4624 / Sysmon 3 for the source) | Yes (2 positive, 1 negative) |
+| CW-014 | T1547.001; + T1021.002, T1570 (SMB) or T1021.001 (RDP) | Sysmon 11 (Startup folders), Security 5145 (+ Sysmon 3) | Yes (2 positive, 2 negative) |
+| CW-015 | T1021.001, T1570 | Sysmon 1, Security 4688 (+ 4624 / Sysmon 3) | Yes (1 positive) |

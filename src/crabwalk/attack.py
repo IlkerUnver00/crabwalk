@@ -3,7 +3,9 @@
 TECHNIQUES: dict[str, str] = {
     "T1021.001": "Remote Services: Remote Desktop Protocol",
     "T1021.002": "Remote Services: SMB/Windows Admin Shares",
+    "T1021.003": "Remote Services: Distributed Component Object Model",
     "T1021.006": "Remote Services: Windows Remote Management",
+    "T1547.001": "Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder",
     "T1047": "Windows Management Instrumentation",
     "T1053.005": "Scheduled Task/Job: Scheduled Task",
     "T1543.003": "Create or Modify System Process: Windows Service",

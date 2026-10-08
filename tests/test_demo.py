@@ -27,7 +27,7 @@ def test_demo_parses_cleanly_and_matches_the_readme():
     assert (stats.files, stats.records, stats.kept) == (9, 129, 123)
     assert stats.file_errors == stats.damaged_files == stats.read_errors == stats.skipped == 0
     by_severity = {s: sum(f.severity == s for f in findings) for s in ("critical", "high", "medium")}
-    assert by_severity == {"critical": 4, "high": 6, "medium": 4}
+    assert by_severity == {"critical": 4, "high": 6, "medium": 3}
 
 
 def test_renamed_psexec_source_host_is_recovered():

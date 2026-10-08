@@ -9,11 +9,18 @@ from datetime import datetime, timedelta
 from typing import Any, ClassVar
 
 from ..catalog import SECURITY, SERVICE_IMAGE_PATH, SYSMON, SYSTEM
+from ..hosts import clean_ip, is_local_address, short_host
 from ..models import NormalizedEvent
 from ..parser import dedup_events
 from ..sessions import LogonSession, TrackResult, build_sessions, norm_logon_id
 
 SEVERITY_RANK = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+
+#: Ports a Windows host listens on for the remote services crabwalk follows
+#: (RPC endpoint mapper, NetBIOS, SMB, RDP, WinRM).
+SERVER_PORTS = frozenset({135, 139, 445, 3389, 5985, 5986})
+#: How far from a connection a host's other records may tell its address.
+KNOWN_ADDRESS_WINDOW = timedelta(days=1)
 
 
 @dataclass(slots=True)
@@ -37,6 +44,9 @@ class Finding:
     # Findings of other rules whose evidence this one already cites in full,
     # with at least their techniques and severity: one story, told once.
     merged: list[Finding] = field(default_factory=list)
+    # How many occurrences of `action` this finding stands for (a burst of 14
+    # logons is one finding of count 14), so the story counts them, not it.
+    count: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +61,7 @@ class Finding:
             "src_host": self.src_host,
             "summary": self.summary,
             "action": self.action,
+            "count": self.count,
             # each merged finding in full: its own time, account, source and records
             "merged": [m.to_dict() for m in self.merged],
             "evidence": [
@@ -103,6 +114,63 @@ class HuntContext:
         for event in events:
             self._index.setdefault((event.channel, event.event_id), []).append(event)
         self._service_installs: list[ServiceInstall] | None = None
+        self._host_addresses: dict[str, list[tuple[datetime, str]]] | None = None
+
+    @property
+    def host_addresses(self) -> dict[str, list[tuple[datetime, str]]]:
+        """(time, address) each host (by short name) is seen using, as its
+        Sysmon 3 records show: see ``_own_side``."""
+        if self._host_addresses is None:
+            found: dict[str, list[tuple[datetime, str]]] = {}
+            for event in self.events_for(SYSMON, 3):
+                host, own = short_host(event.computer), _own_side(event)
+                if host and own:
+                    found.setdefault(host, []).append((event.timestamp, own))
+            self._host_addresses = found
+        return self._host_addresses
+
+    def connection_peer(self, event: NormalizedEvent) -> str | None:
+        """The other machine's address in a Sysmon 3 connection, or None if
+        it is local or the record does not say which side is this host."""
+        return self.connection_peer_side(event)[0]
+
+    def sole_peer(self, connections: list[NormalizedEvent]
+                  ) -> tuple[str | None, str | None, list[NormalizedEvent], list[str]]:
+        """The one remote machine some connections name: (address, name, the
+        records naming it, every peer address). With none or several peers
+        there is no address and no record to cite, only the list."""
+        sides = [(c, *self.connection_peer_side(c)) for c in connections]
+        peers = sorted({ip for _, ip, _ in sides if ip})
+        if len(peers) != 1:
+            return None, None, [], peers
+        cited = [c for c, ip, _ in sides if ip == peers[0]]
+        names = {name.lower(): name for _, ip, name in sides if ip == peers[0] and name}
+        return peers[0], (next(iter(names.values())) if len(names) == 1 else None), cited, peers
+
+    def connection_peer_side(self, event: NormalizedEvent) -> tuple[str | None, str | None]:
+        """(address, host name) of the other machine in a Sysmon 3 record.
+
+        Sysmon does not put the local side in a fixed field on inbound
+        connections, so the side is decided by ``_own_side`` and, failing
+        that, by the addresses this host is seen using in its other records
+        within a day (DHCP hands addresses on). The name is the one Sysmon
+        resolved for that side, when it is a host name other than this one."""
+        own = _own_side(event)
+        sides = [clean_ip(event.get("SourceIp")), clean_ip(event.get("DestinationIp"))]
+        if own is None:
+            seen = self.host_addresses.get(short_host(event.computer) or "", [])
+            known = {ip for when, ip in seen if abs(when - event.timestamp) <= KNOWN_ADDRESS_WINDOW}
+            mine = [ip for ip in sides if ip in known]
+            own = mine[0] if len(mine) == 1 else None
+        if own is None or own not in sides:
+            return None, None
+        peer_is_source = sides[1] == own
+        peer = sides[0] if peer_is_source else sides[1]
+        if not peer or is_local_address(peer):
+            return None, None
+        name = event.get("SourceHostname" if peer_is_source else "DestinationHostname")
+        named = short_host(name)
+        return peer, (str(name).strip() if named and named != short_host(event.computer) else None)
 
     @property
     def service_installs(self) -> list[ServiceInstall]:
@@ -233,6 +301,44 @@ def clip(text: Any, limit: int = 80) -> str:
     return f"{head}… (+{len(flat) - len(head)} chars)"
 
 
+def asks_write(event: NormalizedEvent) -> bool:
+    """Did a 5145 ask for write access (WriteData 0x2 or AppendData 0x4)?
+    A 5145 is an access check; without a write bit the file was only read."""
+    try:
+        return bool(int(str(event.get("AccessMask") or "0"), 16) & 0x6)
+    except ValueError:
+        return False
+
+
 def evidence_key(event: NormalizedEvent) -> tuple[str, str, int, datetime]:
     """Identity of a record across findings (the dedup_events key)."""
     return (event.computer, event.channel, event.record_id, event.timestamp)
+
+
+def _own_side(event: NormalizedEvent) -> str | None:
+    """This host's address in a Sysmon 3 record, when the record itself shows
+    it: the side named with this host's name, the source of a connection the
+    host initiated, or, on an inbound one, the only side on a server port."""
+    host = short_host(event.computer)
+    src, dst = clean_ip(event.get("SourceIp")), clean_ip(event.get("DestinationIp"))
+    for ip, name in ((src, event.get("SourceHostname")), (dst, event.get("DestinationHostname"))):
+        if ip and host and short_host(name) == host:
+            return ip
+    initiated = str(event.get("Initiated")).strip().lower()
+    if initiated == "true":
+        return src
+    if initiated == "false":
+        on_server_port = (_port(event.get("SourcePort")) in SERVER_PORTS,
+                          _port(event.get("DestinationPort")) in SERVER_PORTS)
+        if on_server_port == (True, False):
+            return src
+        if on_server_port == (False, True):
+            return dst
+    return None
+
+
+def _port(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

@@ -10,6 +10,7 @@ from typing import Any
 from ..catalog import SECURITY
 from ..hosts import (
     HostResolver,
+    account_key,
     account_name,
     clean_ip,
     is_anonymous,
@@ -18,6 +19,7 @@ from ..hosts import (
     remote_name,
     short_host,
 )
+from ..models import NormalizedEvent
 from ..sessions import MovementEdge, display_user
 from .base import Finding, HuntContext, Rule, ServiceInstall, clip, share_label
 
@@ -196,7 +198,11 @@ class RdpChain(Rule):
 
 
 class PassTheHash(Rule):
-    """4624 patterns typical for pass-the-hash tooling."""
+    """4624 patterns typical for pass-the-hash tooling.
+
+    Tools open a new NTLM session per operation, so one run leaves a burst of
+    privileged logons: those from one source, as one account, on one host,
+    each within ``burst_gap`` of the previous, are one finding."""
 
     id = "CW-003"
     title = "Pass-the-hash indicators"
@@ -206,9 +212,12 @@ class PassTheHash(Rule):
     # a weaker tell that admin tooling produces all day on real AD; this
     # switch keeps the signature and drops that half.
     privileged_ntlm = True
-    tunables = ("privileged_ntlm",)
+    burst_gap = timedelta(minutes=10)
+    tunables = ("privileged_ntlm", "burst_gap")
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
+        bursts: list[list[NormalizedEvent]] = []
+        open_bursts: dict[tuple[str, tuple[str, str | None], str], list[NormalizedEvent]] = {}
         for event in ctx.events_for(SECURITY, 4624):
             logon_type = str(event.get("LogonType") or "")
             process = str(event.get("LogonProcessName") or "").strip().lower()
@@ -236,21 +245,52 @@ class PassTheHash(Rule):
                 )
             elif self.privileged_ntlm and logon_type == "3" and package == "NTLM":
                 session = ctx.session_for(event.computer, event.get("TargetLogonId"))
-                if session is not None and session.privileged:
-                    yield self.finding(
-                        timestamp=event.timestamp,
-                        host=event.computer,
-                        user=user,
-                        summary=(
-                            f"Privileged NTLM network logon from "
-                            f"{event.get('IpAddress') or '?'} "
-                            f"(workstation: {event.get('WorkstationName') or '?'})"
-                        ),
-                        action="logged on over NTLM with admin rights (possible pass-the-hash)",
-                        evidence=[event],
-                        src_ip=remote_ip(event.get("IpAddress")),
-                        src_host=remote_name(event.get("WorkstationName")),
-                    )
+                if session is None or not session.privileged:
+                    continue
+                source = clean_ip(event.get("IpAddress")) or str(event.get("WorkstationName") or "").lower()
+                key = (event.computer.lower(), account_key(user), source)
+                burst = open_bursts.get(key)
+                if burst and event.timestamp - burst[-1].timestamp <= self.burst_gap:
+                    # one logon kept in two exports (renumbered records) is still one logon
+                    if not any(_same_logon(event, other) for other in burst):
+                        burst.append(event)
+                else:
+                    open_bursts[key] = [event]
+                    bursts.append(open_bursts[key])
+        for burst in bursts:
+            yield self._ntlm_finding(burst)
+
+    def _ntlm_finding(self, burst: list[NormalizedEvent]) -> Finding:
+        first, n = burst[0], len(burst)
+        spellings: dict[str, str] = {}
+        for e in burst:
+            station = str(e.get("WorkstationName") or "?")
+            spellings.setdefault(station.lower(), station)
+        stations = list(spellings.values())
+        # a source name only when every logon of the burst gives the same one
+        names = [remote_name(e.get("WorkstationName")) for e in burst]
+        same_name = None not in names and len({name.lower() for name in names}) == 1
+        span = burst[-1].timestamp - first.timestamp
+        within = "" if n == 1 else (" within a second" if span < timedelta(seconds=1) else f" over {_ago(span)}")
+        logons = "Privileged NTLM network logon" if n == 1 else f"{n} privileged NTLM network logons"
+        shown = ", ".join(stations[:3]) + (f" (+{len(stations) - 3} more)" if len(stations) > 3 else "")
+        return self.finding(
+            timestamp=first.timestamp,
+            host=first.computer,
+            user=display_user(first.get("TargetDomainName"), str(first.get("TargetUserName") or "")),
+            summary=(f"{logons} from {first.get('IpAddress') or '?'}{within} "
+                     f"(workstation{'s' if len(stations) > 1 else ''}: {shown})"),
+            action="logged on over NTLM with admin rights (possible pass-the-hash)",
+            evidence=burst,
+            src_ip=remote_ip(first.get("IpAddress")),
+            src_host=names[0] if same_name else None,
+            count=n,
+        )
+
+
+def _same_logon(a: NormalizedEvent, b: NormalizedEvent) -> bool:
+    return (a.timestamp == b.timestamp
+            and str(a.get("TargetLogonId") or "").lower() == str(b.get("TargetLogonId") or "").lower())
 
 
 class RemoteScheduledTask(Rule):

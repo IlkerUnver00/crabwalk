@@ -35,7 +35,7 @@ pip install -e .
 crabwalk hunt demo/evtx --report report.html --graph attack-paths.html --story story.md
 ```
 
-14 findings, 4 critical. Among them, a renamed PsExec whose source machine
+13 findings, 4 critical. Among them, a renamed PsExec whose source machine
 (`NLLT108334`) is recovered from the target's own share-access log, a DCSync, and a
 multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`, told as a [story](#the-attack-story).
 [`demo/README.md`](demo/README.md) explains what each file shows.
@@ -49,12 +49,13 @@ multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`, told as a [story](#the
   logic, severity, tunables, an allowlist example, false positives, blind spots
   and the tests that prove it.
 - **[Benchmark](docs/BENCHMARK.md)** — crabwalk, Hayabusa 4.1.0 and Chainsaw
-  2.16.5 run on the same 47 lateral-movement recordings, the corpus crabwalk's
-  rules were validated on. The rule engines flag more files at medium or above
-  (29 and 27 against 16). crabwalk flags the most with an alert tagged as
-  lateral movement (10 against 8 and 6), and is the only one to alert on four
-  target-side Security logs and one WinRM log, with 34 alerts at medium or
-  above against 130 and 110.
+  2.16.5 on the same recordings, twice. On the 47 lateral-movement files
+  crabwalk's rules were written on, the first run had the engines flag more files
+  (29 and 27 against 16) and crabwalk flag the most with a lateral-movement alert
+  (10 against 8 and 6; 22 and 16 with today's rules, built from those misses),
+  and crabwalk alone alerts on four target-side share logs and one WinRM log. On a second corpus its rules never saw (293 files), the lead is gone:
+  3 of 18 lateral-movement files against 6 and 5. The page lists what that run
+  exposed and what changed because of it.
 - **[How crabwalk compares](docs/COMPARISON.md)** — Chainsaw, Hayabusa,
   Zircolite, LogonTracer, DeepBlueCLI, APT-Hunter and EvtxECmd: what each one
   does, and when to use which.
@@ -76,7 +77,7 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
 - [x] **Step 2** — Logon session tracking: LogonId lifecycles per host, inbound
       remote-logon edges (4624/RDP), outbound explicit-credential edges (4648),
       privilege backfill from 4672
-- [x] **Step 3** — Detection rules engine: 12 rules over the session/edge state
+- [x] **Step 3** — Detection rules engine: 15 rules over the session/edge state
       (see table below), findings deduplicated and ranked, every finding tagged
       with ATT&CK technique IDs
 - [x] **Step 4** — ATT&CK Navigator layer export (`--layer`): findings scored
@@ -107,6 +108,12 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
       findings told as dated steps; one event, one finding (cross-rule merging)
 - [x] **Step 15** — Benchmark against Hayabusa and Chainsaw on the same
       recordings (`scripts/benchmark.py`, [results](docs/BENCHMARK.md))
+- [x] **Step 16** — A second corpus the rules never saw
+      ([EVTX-to-MITRE-Attack](docs/BENCHMARK.md#a-second-corpus-the-rules-never-saw)),
+      measured before any change; then the fixes it exposed (local PsExec over SMB
+      loopback, bursts of NTLM logons) and rules for the gaps the first benchmark
+      showed: DCOM (CW-013), Startup folders written over SMB or RDP (CW-014),
+      programs run from `\\tsclient` (CW-015), `winrs` (CW-007)
 
 ## Quickstart
 
@@ -138,7 +145,7 @@ HOST-TO-HOST MOVEMENT
 
 `hunt` runs every detection rule and prints ranked findings. Against the
 [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)
-dataset (278 files, 37k records) it produces 72 findings across 11 techniques,
+dataset (278 files, 37k records) it produces 76 findings across 14 techniques,
 including wmiexec's `cmd.exe /Q /c ... 1> \\127.0.0.1\ADMIN$\..` signature,
 `sekurlsa::pth` logons, an LSASS dump launched through WMI, and a renamed PsExec
 whose source machine is recovered from the target's own share-access log:
@@ -321,16 +328,19 @@ cannot tell a trojaned `ccmsetup.exe` from the real one, so keep `users` and
 |---|---|---|---|
 | CW-001 | Remote logon followed by service install | T1021.002, T1543.003 | PsExec pattern; known tool service names → critical |
 | CW-002 | RDP chain across hosts | T1021.001 | A→B→C graph walk with hostname/IP correlation |
-| CW-003 | Pass-the-hash indicators | T1550.002 | `seclogo`/LT9 signature; privileged NTLM network logons |
+| CW-003 | Pass-the-hash indicators | T1550.002 | `seclogo`/LT9 signature; privileged NTLM network logons, one finding per burst |
 | CW-004 | Scheduled task from remote session | T1053.005 | 4698/4702 tied to a remote LogonId |
 | CW-005 | Executable on administrative share | T1021.002, T1570 | ADMIN$/C$ + executable payloads |
-| CW-006 | Process spawned via WMI | T1047 | WmiPrvSE children; shells → high |
-| CW-007 | Remote execution via WinRM | T1021.006 | wsmprovhost children + WinRM event 91 |
+| CW-006 | Process spawned via WMI | T1047 | WmiPrvSE children; shells → high; source from the caller's logon session |
+| CW-007 | Remote execution via WinRM | T1021.006 | wsmprovhost (PowerShell remoting) and winrshost (`winrs`) children + WinRM event 91 |
 | CW-008 | Suspicious PowerShell script block | T1059.001 | cradles, base64+IEX, Mimikatz, AMSI bypass |
-| CW-009 | Event log cleared | T1070.001 | Security 1102, System 104 |
+| CW-009 | Event log cleared | T1070.001 | Security 1102, System 104; clearing every log at once is one finding |
 | CW-010 | Kerberoasting (RC4 service ticket) | T1558.003 | 4769 with RC4 (0x17) downgrade, non-machine SPN |
 | CW-011 | DCSync (directory replication) | T1003.006 | 4662 replication GUID by a non-DC principal |
-| CW-012 | Remote execution over named pipes | T1021.002, T1569.002 (+T1543.003, T1053.005, T1570) | Sysmon 17/18 + 5145 IPC$: tool pipes (PsExec, RemCom/impacket, PAExec, CSExec, Cobalt Strike), PsExec stdio pipes naming the source host, remote svcctl/ntsvcs/atsvc corroborated by a service install, task or ADMIN$ drop. Clustered per client, so concurrent sources stay apart; a client's own pipe sweep is suppressed; a tool client running on the host itself is reported as *local* execution, not lateral movement |
+| CW-012 | Remote execution over named pipes | T1021.002, T1569.002 (+T1543.003, T1053.005, T1570) | Sysmon 17/18 + 5145 IPC$: tool pipes (PsExec, RemCom/impacket, PAExec, CSExec, Cobalt Strike), PsExec stdio pipes naming the source host, remote svcctl/ntsvcs/atsvc corroborated by a service install, task or ADMIN$ drop. Clustered per client, so concurrent sources stay apart; a client's own pipe sweep is suppressed; a tool client running on the host itself (SMB loopback included) is reported as *local* execution, not lateral movement |
+| CW-013 | Execution through DCOM | T1021.003 | A COM server activated with `-Embedding` (MMC20, LethalHTA's mshta, Office automation): a process it spawns, or the activation itself (mshta always; the others in a remote network logon); the source from the logon session or the one peer that called the COM server |
+| CW-014 | Startup folder written from another host | T1547.001 + T1021.002, T1570 (SMB) / T1021.001 (RDP) | A file landing in a Startup folder written by the SMB server (Sysmon 11 "System", 5145 write) or pushed back through an RDP client's shared drive (mstsc.exe) |
+| CW-015 | Program run from an RDP client's drive | T1021.001, T1570 | A process started from `\\tsclient\` (SharpRDP and co.), source from the RDP logon or connection |
 
 ## Design notes
 
@@ -359,14 +369,16 @@ the full list.
 
 | Technique | Name | Rules | Data crabwalk reads |
 |---|---|---|---|
-| T1021.001 | Remote Desktop Protocol | CW-002 | RDP chains A→B→C from 4624 LT10 and TS-LSM 21/25 |
-| T1021.002 | SMB / Admin Shares | CW-001, CW-005, CW-012 | remote logon + service install; 5145 on ADMIN$/C$ and IPC$; Sysmon 17/18 |
-| T1021.006 | WinRM | CW-007 | wsmprovhost child processes (Sysmon 1, 4688), WinRM/Operational 91 |
+| T1021.001 | Remote Desktop Protocol | CW-002, CW-014, CW-015 | RDP chains A→B→C from 4624 LT10 and TS-LSM 21/25; files pushed through or run from `\\tsclient` (Sysmon 11, Sysmon 1, 4688) |
+| T1021.002 | SMB / Admin Shares | CW-001, CW-005, CW-012, CW-014 | remote logon + service install; 5145 on ADMIN$/C$ and IPC$; Sysmon 17/18; Startup-folder writes by the SMB server |
+| T1021.003 | DCOM | CW-013 | COM servers started with `-Embedding` and their children (Sysmon 1, 4688); 4624 / Sysmon 3 for the source |
+| T1021.006 | WinRM | CW-007 | wsmprovhost and winrshost child processes (Sysmon 1, 4688), WinRM/Operational 91 |
 | T1047 | WMI | CW-006 | WmiPrvSE child processes (Sysmon 1, 4688) |
 | T1053.005 | Scheduled Task | CW-004, CW-012 | 4698/4702 tied to a remote LogonId; remote atsvc access + task |
 | T1543.003 | Windows Service | CW-001, CW-012 | 7045/4697/Sysmon 13 after a remote logon or credited to a pipe cluster |
 | T1569.002 | Service Execution | CW-012 | remote-exec tool pipes, remote svcctl/ntsvcs access (Sysmon 17/18, 5145 IPC$) |
-| T1570 | Lateral Tool Transfer | CW-005, CW-012 | executables reached on ADMIN$/C$ (5145) |
+| T1570 | Lateral Tool Transfer | CW-005, CW-012, CW-014, CW-015 | executables reached on ADMIN$/C$ (5145); files copied into Startup folders; programs run from `\\tsclient` |
+| T1547.001 | Startup Folder | CW-014 | files created in a Startup folder by another host (Sysmon 11, 5145) |
 | T1550.002 | Pass the Hash | CW-003 | 4624 LT9 `seclogo` signature; privileged (4672) NTLM network logons |
 | T1558.003 | Kerberoasting | CW-010 | 4769 with RC4 (0x17) tickets |
 | T1003.006 | DCSync | CW-011 | 4662 replication rights by a non-DC principal |
@@ -386,6 +398,12 @@ pipe-enumeration sweeps must not trigger CW-012). One test proves the cross-host
 claim end to end: from the target's own 5145 log, CW-012 recovers PsExec's source
 as `NLLT108334` at `10.0.2.16`. A smoke test parses the entire corpus (37k+
 records across 278 files) and fails on a single unreadable file or record.
+
+A corpus the rules were tuned on flatters them, so a second one,
+[EVTX-to-MITRE-Attack](https://github.com/mdecrevoisier/EVTX-to-MITRE-Attack), serves
+as a hold-out: crabwalk was run on it blind, before any of its records were read, and
+[BENCHMARK.md](docs/BENCHMARK.md#a-second-corpus-the-rules-never-saw) reports that run,
+the bugs it exposed and every change made because of it.
 
 The corpus is not vendored. Clone it and point the tests at it:
 

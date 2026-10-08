@@ -12,7 +12,7 @@ crabwalk hunt demo/evtx --report report.html --graph attack-paths.html --story s
 files      : 9
 records    : 129  (kept: 123, unparsable: 0)
 sessions   : 13 | edges: 12
-findings   : 14  (critical 4, high 6, medium 4)
+findings   : 13  (critical 4, high 6, medium 3)
 ```
 
 The same output, led by the attack story, is published as a live report on the

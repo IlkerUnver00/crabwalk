@@ -357,13 +357,16 @@ def _edge_beats(edge: GraphEdge, nodes: dict[str, GraphNode], accounts: _Account
             visits[-1].append(m)
         else:
             visits.append([m])
+    # A logon a finding on this edge already tells (the 4624s of a pass-the-hash
+    # burst, which can run past one visit) is not counted again in any visit.
+    cited = frozenset().union(*(m.records for m in edge.movements if m.finding is not None))
     beats = []
     for visit in visits:
         found = [m.finding for m in visit if m.finding is not None]
-        cited = frozenset().union(*(m.records for m in visit if m.finding is not None))
-        # a logon a finding already tells (the 4624 of a pass-the-hash hit) is not counted again
         logons = [m for m in visit if m.finding is None and not (m.records and m.records <= cited)]
         segments = _logon_segments(logons, accounts) + _action_segments(found)
+        if not segments:  # only logons a finding in an earlier visit tells
+            continue
         segments.sort(key=lambda s: s[0])
         times = [m.timestamp for m in visit] + [e.timestamp for f in found for e in f.evidence]
         beats.append(Beat(
@@ -424,7 +427,9 @@ def _action_segments(found: list[Finding]) -> list[tuple[datetime, str]]:
         by_rule.setdefault(f.rule_id, []).append(f)
     segments = []
     for items in by_rule.values():
-        counts = Counter(_phrase(f) for f in items)
+        counts: Counter[str] = Counter()
+        for f in items:
+            counts[_phrase(f)] += f.count
         distinct = list(dict.fromkeys(_phrase(f) for f in items))
         if len(distinct) > PHRASES_PER_RULE + 1:
             shown = [_times(p, counts[p]) for p in distinct[:PHRASES_PER_RULE]]

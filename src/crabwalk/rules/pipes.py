@@ -46,7 +46,7 @@ from ..catalog import SECURITY, SYSMON
 from ..hosts import clean_ip, is_local_address, short_host
 from ..models import NormalizedEvent
 from ..sessions import display_user
-from .base import Finding, HuntContext, Rule, ServiceInstall, basename, clip, share_label
+from .base import Finding, HuntContext, Rule, ServiceInstall, asks_write, basename, clip, share_label
 from .lateral import (
     KNOWN_REMOTE_EXEC_SERVICES,
     credible_installs,
@@ -356,19 +356,24 @@ class NamedPipeExecution(Rule):
             return None
 
         known_pipes = {h.pipe for h in all_hits if h.computer == host}
-        origin = None
+        # stdio pipes of a client on this host, and of one on another machine
+        here, away = [], []
         for hit in cluster.hits:
             origin = stdio_origin(hit.pipe, known_pipes)
             if origin:
-                break
+                local_run = hit.is_local_connect or short_host(origin[1]) == short_host(host)
+                (here if local_run else away).append(origin)
         local_client = _local_client(cluster)
         local_evidence = bool(
             local_client
-            or (origin and short_host(origin[1]) == short_host(host))
+            or here
             or (not any(h.remote for h in cluster.hits)
                 and any(h.src_ip and is_local_address(h.src_ip) for h in cluster.hits))
         )
-        local = local_evidence and not _driven_remotely(cluster)
+        local = local_evidence and not _driven_remotely(cluster, host, known_pipes, w)
+        # A remote finding takes its source host only from a remote client's
+        # pipes: a local run beside it names this host, not the attacker's.
+        origin = (here or away or [None])[0] if local else (away or [None])[0]
 
         strongest = max(cluster.kinds, key=_KIND_RANK.__getitem__)
         severity = {"tool": "high", "control": "medium", "random": "medium"}[strongest]
@@ -432,7 +437,8 @@ def _local_client(cluster: _Cluster) -> str | None:
     return None
 
 
-def _driven_remotely(cluster: _Cluster) -> bool:
+def _driven_remotely(cluster: _Cluster, host: str, known_pipes: set[str],
+                     w: PipeWindows = DEFAULT_WINDOWS) -> bool:
     """Was any signature pipe of the cluster used from another machine?
 
     Control and random-pipe hits only count when remote. A tool pipe counts
@@ -440,11 +446,33 @@ def _driven_remotely(cluster: _Cluster) -> bool:
     local process also drives (a PsExec client on the box, a squatter waiting
     for one) is local, while e.g. a Cobalt Strike SMB beacon linked from
     another host stays lateral even if local post-ex pipes follow.
+
+    PsExec run against its own host reaches its service pipe over SMB
+    loopback, which Sysmon logs as a "System" connect, while the client
+    itself opens the stdio pipes that name this host as their source. Each
+    such run excuses one connect: the address-less one to its service pipe
+    closest before its first local stdio connect, within ``skew``. Every
+    other "System" connect to that pipe, and any a 5145 ties to a remote
+    client, still counts.
     """
     if cluster.kinds & {"control", "random"}:
         return True
     locally_driven = {h.pipe.lower() for h in cluster.hits if h.is_local_connect}
-    return any(h.remote and h.pipe.lower() not in locally_driven for h in cluster.hits)
+    runs: dict[tuple[str, str], datetime] = {}  # (service, pid) of a local run -> first stdio connect
+    for hit in cluster.hits:
+        origin = stdio_origin(hit.pipe, known_pipes) if hit.is_local_connect else None
+        if origin and short_host(origin[1]) == short_host(host):
+            key = (origin[0].lower(), origin[2])
+            runs[key] = min(runs.get(key, hit.timestamp), hit.timestamp)
+    excused: set[int] = set()
+    for (service, _pid), first in sorted(runs.items(), key=lambda kv: kv[1]):
+        own = [h for h in cluster.hits
+               if h.remote and h.peer is None and id(h) not in excused and h.pipe.lower() == service
+               and first - w.skew <= h.timestamp <= first]
+        if own:
+            excused.add(id(max(own, key=lambda h: h.timestamp)))
+    return any(h.remote and h.pipe.lower() not in locally_driven and id(h) not in excused
+               for h in cluster.hits)
 
 
 def _is_enumeration(cluster: _Cluster, all_hits: list[PipeHit], w: PipeWindows) -> bool:
@@ -511,20 +539,11 @@ def _action(cluster: _Cluster, origin: tuple[str, str, str] | None,
     return text + ("; no other host involved" if local else "")
 
 
-def _writes(event: NormalizedEvent) -> bool:
-    """Did a 5145 ask for write access (WriteData 0x2 or AppendData 0x4)?
-    A 5145 is an access check; without a write bit the file was only read."""
-    try:
-        return bool(int(str(event.get("AccessMask") or "0"), 16) & 0x6)
-    except ValueError:
-        return False
-
-
 def _drop_phrases(drops: list[NormalizedEvent]) -> list[str]:
     """'copied 'a.exe' and 'b.dll' to ADMIN$', 'accessed 'c.exe' on C$'."""
     groups: dict[tuple[str, str], list[str]] = {}
     for drop in drops:
-        verb = "copied {} to {}" if _writes(drop) else "accessed {} on {}"
+        verb = "copied {} to {}" if asks_write(drop) else "accessed {} on {}"
         names = groups.setdefault((verb, share_label(drop.get("ShareName"))), [])
         name = f"'{clip(drop.get('RelativeTargetName'), 60)}'"
         if name not in names:
@@ -578,7 +597,7 @@ def _summary(cluster: _Cluster, origin: tuple[str, str, str] | None) -> str:
         parts.append(f"then task '{task.get('TaskName') or '?'}' {verb}{more}")
     if cluster.drops:
         drop = cluster.drops[0]
-        verb = "written to" if _writes(drop) else "accessed on"
+        verb = "written to" if asks_write(drop) else "accessed on"
         files = {str(d.get("RelativeTargetName") or "").lower() for d in cluster.drops}
         more = f" (+{len(files) - 1} more file(s))" if len(files) > 1 else ""
         parts.append(f"after '{drop.get('RelativeTargetName')}' was {verb} {drop.get('ShareName')}{more}")

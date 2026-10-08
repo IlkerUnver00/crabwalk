@@ -5,6 +5,7 @@
       "hayabusa": "Hayabusa v4.1.0 - Suzumushi Release",
       "chainsaw": "chainsaw 2.16.5"
     },
+    "engine_rows_reused_from": "claude_results_a_engines.json",
     "corpus": "sbousseaden/EVTX-ATTACK-SAMPLES",
     "corpus_commit": "4ceed2f4706daf601c212a8f91c113dd85349a2c",
     "folder": "Lateral Movement",
@@ -22,12 +23,12 @@
   "summary": {
     "crabwalk": {
       "files": 47,
-      "files_with_medium_plus": 16,
-      "files_with_lateral_medium_plus": 10,
-      "files_with_any_alert": 16,
-      "alerts_total": 34,
-      "medium_plus_total": 34,
-      "median_medium_plus_per_detected_file": 1.5,
+      "files_with_medium_plus": 22,
+      "files_with_lateral_medium_plus": 16,
+      "files_with_any_alert": 22,
+      "alerts_total": 41,
+      "medium_plus_total": 41,
+      "median_medium_plus_per_detected_file": 1.0,
       "max_medium_plus_in_a_file": 5
     },
     "hayabusa": {
@@ -51,45 +52,8 @@
       "max_medium_plus_in_a_file": 26
     }
   },
-  "timing_whole_corpus": {
-    "crabwalk": {
-      "seconds": 0.9,
-      "alerts": 72,
-      "by_level": {
-        "medium": 17,
-        "high": 51,
-        "critical": 4
-      },
-      "medium_plus": 72,
-      "lateral_medium_plus": 25
-    },
-    "hayabusa": {
-      "seconds": 8.1,
-      "alerts": 5360,
-      "by_level": {
-        "informational": 3267,
-        "low": 538,
-        "medium": 948,
-        "high": 583,
-        "critical": 24
-      },
-      "medium_plus": 1555,
-      "lateral_medium_plus": 60
-    },
-    "chainsaw": {
-      "seconds": 18.3,
-      "alerts": 1726,
-      "by_level": {
-        "informational": 44,
-        "low": 336,
-        "medium": 666,
-        "high": 612,
-        "critical": 68
-      },
-      "medium_plus": 1346,
-      "lateral_medium_plus": 36
-    }
-  },
+  "summary_by_subfolder": {},
+  "timing_whole_corpus": {},
   "files": [
     {
       "file": "DFIR_RDP_Client_TimeZone_RdpCoreTs_104_example.evtx",
@@ -99,21 +63,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -125,21 +92,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -151,7 +121,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 18,
@@ -171,7 +142,8 @@
               "Net Conn (Sysmon Alert)",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 5,
@@ -186,7 +158,8 @@
               "Uncommon Svchost Parent Process",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -194,11 +167,24 @@
       "file": "lateral_movement_startup_3_11.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-014 Startup folder written from another host",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-014 Startup folder written from another host",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 3,
@@ -213,7 +199,8 @@
               "Startup Folder File Write",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 1,
@@ -227,7 +214,8 @@
               "Startup Folder File Write",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -250,6 +238,12 @@
               "CW-009 Event log cleared",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-003 Pass-the-hash indicators",
+              1
+            ]
           ]
         },
         "hayabusa": {
@@ -267,6 +261,16 @@
               "Log Cleared",
               1
             ],
+            [
+              "Pass the Hash Activity 2",
+              1
+            ],
+            [
+              "Successful Overpass the Hash Attempt",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
             [
               "Pass the Hash Activity 2",
               1
@@ -300,6 +304,16 @@
               "Successful Overpass the Hash Attempt",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Pass the Hash Activity 2",
+              1
+            ],
+            [
+              "Successful Overpass the Hash Attempt",
+              1
+            ]
           ]
         }
       }
@@ -319,6 +333,12 @@
               "CW-005 Executable on administrative share",
               5
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-005 Executable on administrative share",
+              5
+            ]
           ]
         },
         "hayabusa": {
@@ -328,14 +348,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -347,7 +369,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 1,
@@ -361,14 +384,16 @@
               "Reg Key Value Set (Sysmon Alert)",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -376,11 +401,24 @@
       "file": "LM_DCOM_MSHTA_LethalHTA_Sysmon_3_1.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-013 Execution through DCOM",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-013 Execution through DCOM",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 3,
@@ -395,7 +433,8 @@
               "Potential LethalHTA Technique Execution",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 1,
@@ -409,7 +448,8 @@
               "Potential LethalHTA Technique Execution",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -421,21 +461,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -447,7 +490,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 2,
@@ -461,7 +505,8 @@
               "Unsigned Image Loaded Into LSASS Process",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 2,
@@ -475,7 +520,8 @@
               "Unsigned Image Loaded Into LSASS Process",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -483,11 +529,24 @@
       "file": "LM_impacket_docmexec_mmc_sysmon_01.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "alerts": 3,
+          "by_level": {
+            "high": 3
+          },
+          "medium_plus": 3,
+          "lateral_medium_plus": 3,
+          "titles_medium_plus": [
+            [
+              "CW-013 Execution through DCOM",
+              3
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-013 Execution through DCOM",
+              3
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 25,
@@ -524,6 +583,20 @@
               "Whoami.EXE Execution With Output Option",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "HackTool - Potential Impacket Lateral Movement Activity",
+              3
+            ],
+            [
+              "MMC Spawning Windows Shell",
+              3
+            ],
+            [
+              "MMC20 Lateral Movement",
+              1
+            ]
           ]
         },
         "chainsaw": {
@@ -548,6 +621,16 @@
               "MMC20 Lateral Movement",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "MMC Spawning Windows Shell",
+              3
+            ],
+            [
+              "MMC20 Lateral Movement",
+              1
+            ]
           ]
         }
       }
@@ -560,21 +643,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -589,6 +675,12 @@
           "medium_plus": 1,
           "lateral_medium_plus": 1,
           "titles_medium_plus": [
+            [
+              "CW-007 Remote execution via WinRM",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
             [
               "CW-007 Remote execution via WinRM",
               1
@@ -613,6 +705,12 @@
               "Remote PowerShell Session Host Process (WinRM)",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Remote PowerShell Session Host Process (WinRM)",
+              1
+            ]
           ]
         },
         "chainsaw": {
@@ -624,6 +722,12 @@
           "medium_plus": 1,
           "lateral_medium_plus": 1,
           "titles_medium_plus": [
+            [
+              "Remote PowerShell Session Host Process (WinRM)",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
             [
               "Remote PowerShell Session Host Process (WinRM)",
               1
@@ -640,7 +744,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 6,
@@ -655,7 +760,8 @@
               "DLL Load via LSASS",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 2,
@@ -669,7 +775,8 @@
               "DLL Load via LSASS",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -693,6 +800,16 @@
               "CW-012 Remote execution over named pipes",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-005 Executable on administrative share",
+              1
+            ],
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
           ]
         },
         "hayabusa": {
@@ -702,14 +819,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -721,7 +840,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 5,
@@ -741,7 +861,8 @@
               "Uncommon Svchost Parent Process",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 3,
@@ -760,7 +881,8 @@
               "Uncommon Svchost Parent Process",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -779,6 +901,12 @@
               "CW-012 Remote execution over named pipes",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
           ]
         },
         "hayabusa": {
@@ -786,14 +914,16 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -805,7 +935,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 5,
@@ -820,7 +951,8 @@
               "Suspicious Service Path",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 3,
@@ -829,7 +961,8 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -848,6 +981,12 @@
               "CW-012 Remote execution over named pipes",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
           ]
         },
         "hayabusa": {
@@ -857,14 +996,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -872,21 +1013,31 @@
       "file": "LM_ScheduledTask_ATSVC_target_host.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 5,
+          "alerts": 4,
           "by_level": {
-            "medium": 3,
+            "medium": 2,
             "high": 2
           },
-          "medium_plus": 5,
-          "lateral_medium_plus": 4,
+          "medium_plus": 4,
+          "lateral_medium_plus": 3,
           "titles_medium_plus": [
             [
               "CW-003 Pass-the-hash indicators",
-              3
+              2
             ],
             [
               "CW-009 Event log cleared",
               1
+            ],
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-003 Pass-the-hash indicators",
+              2
             ],
             [
               "CW-012 Remote execution over named pipes",
@@ -921,7 +1072,8 @@
               "Reconnaissance Activity",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 11,
@@ -951,7 +1103,8 @@
               "Security Audit Logs Cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -966,6 +1119,12 @@
           "medium_plus": 1,
           "lateral_medium_plus": 1,
           "titles_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
             [
               "CW-012 Remote execution over named pipes",
               1
@@ -991,7 +1150,8 @@
               "Malicious Named Pipe Created",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 6,
@@ -1006,7 +1166,8 @@
               "Malicious Named Pipe Created",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1014,11 +1175,24 @@
       "file": "LM_sysmon_1_12_13_3_tsclient_SharpRdp.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "medium": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-015 Program run from an RDP client's drive",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-015 Program run from an RDP client's drive",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 8,
@@ -1034,7 +1208,8 @@
               "RunMRU Registry Key Deletion - Registry",
               4
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 5,
@@ -1049,7 +1224,8 @@
               "RunMRU Registry Key Deletion - Registry",
               4
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1061,7 +1237,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 35,
@@ -1086,7 +1263,8 @@
               "Elevated System Shell Spawned From Uncommon Parent Location",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 23,
@@ -1110,7 +1288,8 @@
               "Elevated System Shell Spawned From Uncommon Parent Location",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1122,7 +1301,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 3,
@@ -1131,14 +1311,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1153,6 +1335,12 @@
           "medium_plus": 1,
           "lateral_medium_plus": 1,
           "titles_medium_plus": [
+            [
+              "CW-012 Remote execution over named pipes",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
             [
               "CW-012 Remote execution over named pipes",
               1
@@ -1202,6 +1390,12 @@
               "Abused Debug Privilege by Arbitrary Parent Processes",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Potential CobaltStrike Service Installations - Registry",
+              1
+            ]
           ]
         },
         "chainsaw": {
@@ -1246,6 +1440,12 @@
               "Potential PowerShell Command Line Obfuscation",
               2
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Potential CobaltStrike Service Installations - Registry",
+              1
+            ]
           ]
         }
       }
@@ -1258,7 +1458,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 4,
@@ -1268,14 +1469,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1283,11 +1486,24 @@
       "file": "LM_tsclient_startup_folder.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-014 Startup folder written from another host",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-014 Startup folder written from another host",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 7,
@@ -1308,7 +1524,8 @@
               "Startup Folder File Write",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 6,
@@ -1328,7 +1545,8 @@
               "Startup Folder File Write",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1340,7 +1558,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 9,
@@ -1356,7 +1575,8 @@
               "Suspicious Process By Web Server Process",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 6,
@@ -1371,7 +1591,8 @@
               "Suspicious Process By Web Server Process",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1379,11 +1600,24 @@
       "file": "LM_winrm_exec_sysmon_1_winrshost.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "high": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-007 Remote execution via WinRM",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-007 Remote execution via WinRM",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 4,
@@ -1398,6 +1632,12 @@
               "Potential Lateral Movement via Windows Remote Shell",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Potential Lateral Movement via Windows Remote Shell",
+              1
+            ]
           ]
         },
         "chainsaw": {
@@ -1408,6 +1648,12 @@
           "medium_plus": 1,
           "lateral_medium_plus": 1,
           "titles_medium_plus": [
+            [
+              "Potential Lateral Movement via Windows Remote Shell",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
             [
               "Potential Lateral Movement via Windows Remote Shell",
               1
@@ -1431,6 +1677,12 @@
               "CW-007 Remote execution via WinRM",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-007 Remote execution via WinRM",
+              1
+            ]
           ]
         },
         "hayabusa": {
@@ -1438,14 +1690,16 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1457,7 +1711,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 6,
@@ -1466,7 +1721,8 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 5,
@@ -1475,7 +1731,8 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1495,7 +1752,8 @@
               "CW-006 Process spawned via WMI",
               4
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 20,
@@ -1523,7 +1781,8 @@
               "Explorer Process Tree Break",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 8,
@@ -1546,7 +1805,8 @@
               "Suspicious WmiPrvSE Child Process",
               2
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1565,7 +1825,8 @@
               "CW-009 Event log cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 7,
@@ -1589,6 +1850,16 @@
               "Log Cleared",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Explicit Logon Attempt (Susp Proc) - Possible Mimikatz PrivEsc",
+              2
+            ],
+            [
+              "Suspicious Remote Logon with Explicit Credentials",
+              2
+            ]
           ]
         },
         "chainsaw": {
@@ -1607,6 +1878,12 @@
             [
               "Security Audit Logs Cleared",
               1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "Suspicious Remote Logon with Explicit Credentials",
+              2
             ]
           ]
         }
@@ -1627,7 +1904,8 @@
               "CW-006 Process spawned via WMI",
               3
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 22,
@@ -1660,6 +1938,12 @@
               "Whoami.EXE Execution With Output Option",
               1
             ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "HackTool - Potential Impacket Lateral Movement Activity",
+              3
+            ]
           ]
         },
         "chainsaw": {
@@ -1675,7 +1959,8 @@
               "WmiPrvSE Spawned A Process",
               3
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1687,7 +1972,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 3,
@@ -1705,7 +1991,8 @@
               "MSSQL XPCmdshell Suspicious Execution",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 4,
@@ -1719,7 +2006,8 @@
               "Potential MSSQL Suspicious Activity",
               4
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1731,21 +2019,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1764,7 +2055,8 @@
               "CW-009 Event log cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 1,
@@ -1778,7 +2070,8 @@
               "Log Cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 1,
@@ -1792,7 +2085,8 @@
               "Security Audit Logs Cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1804,7 +2098,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 11,
@@ -1814,7 +2109,8 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 6,
@@ -1823,7 +2119,8 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1846,7 +2143,8 @@
               "CW-009 Event log cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 5,
@@ -1865,7 +2163,8 @@
               "Suspicious Scheduled Task Update",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 4,
@@ -1880,7 +2179,8 @@
               "Security Audit Logs Cleared",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1892,7 +2192,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 4,
@@ -1908,7 +2209,8 @@
               "PsExec Service Execution",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 4,
@@ -1923,7 +2225,8 @@
               "PsExec Service Execution",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1935,21 +2238,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1961,7 +2267,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 4,
@@ -1971,14 +2278,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -1990,7 +2299,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 2,
@@ -1999,14 +2309,16 @@
           },
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -2025,7 +2337,8 @@
               "CW-006 Process spawned via WMI",
               3
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 24,
@@ -2049,6 +2362,12 @@
             [
               "Suspicious WmiPrvSE Child Process",
               1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "HackTool - Potential Impacket Lateral Movement Activity",
+              3
             ]
           ]
         },
@@ -2074,7 +2393,8 @@
               "Suspicious WmiPrvSE Child Process",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -2086,21 +2406,24 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 0,
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -2112,7 +2435,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 3,
@@ -2128,7 +2452,8 @@
               "Suspicious Child Process Of SQL Server",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 4,
@@ -2152,7 +2477,8 @@
               "Suspicious Child Process Of SQL Server",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     },
@@ -2164,7 +2490,8 @@
           "by_level": {},
           "medium_plus": 0,
           "lateral_medium_plus": 0,
-          "titles_medium_plus": []
+          "titles_medium_plus": [],
+          "titles_lateral_medium_plus": []
         },
         "hayabusa": {
           "alerts": 5,
@@ -2179,7 +2506,8 @@
               "CurrentVersion Autorun Keys Modification",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         },
         "chainsaw": {
           "alerts": 1,
@@ -2193,7 +2521,8 @@
               "CurrentVersion Autorun Keys Modification",
               1
             ]
-          ]
+          ],
+          "titles_lateral_medium_plus": []
         }
       }
     }

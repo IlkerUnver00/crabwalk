@@ -102,6 +102,7 @@ IDENTIFYING_FIELDS = (
     "TargetObject", "Details",                              # Sysmon 13
     "TaskName", "TaskContent", "TaskContentNew",            # 4698, 4702
     "CommandLine", "NewProcessName", "Hashes", "OriginalFileName",  # Sysmon 1, 4688
+    "TargetFilename",                                       # Sysmon 11
     "ScriptBlockText",                                      # 4104
     "Properties", "ObjectName",                             # 4662
     "Channel", "BackupPath",                                # System 104

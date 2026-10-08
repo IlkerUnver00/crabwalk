@@ -259,6 +259,36 @@ def test_a_logon_is_told_once_and_null_sessions_are_not_admin_logons():
     assert step.users == ("CORP\\admin",)
 
 
+def _admin_ntlm_logons(n, start, *, minutes_apart, first_id, user="admin"):
+    events = []
+    for i in range(n):
+        lid = f"0x{first_id + i:x}"
+        events += [logon("SRV02", "10.0.0.7", "WKS07", minutes=start + i * minutes_apart, logon_id=lid,
+                         user=user, AuthenticationPackageName="NTLM"),
+                   ev(4672, minutes=start + i * minutes_apart, computer="SRV02", SubjectLogonId=lid,
+                      SubjectUserName=user, SubjectDomainName="CORP")]
+    return events
+
+
+def test_bursts_are_counted_by_their_logons_not_by_their_findings():
+    # two accounts' CW-003 bursts (2 logons each) in one step: "4 times", never "twice twice"
+    events = (_admin_ntlm_logons(2, 0, minutes_apart=0.01, first_id=0x40)
+              + _admin_ntlm_logons(2, 1, minutes_apart=0.01, first_id=0x50, user="bob"))
+    findings = [f for f in run_rules(HuntContext.build(events)) if f.rule_id == "CW-003"]
+    assert [f.count for f in findings] == [2, 2]
+    text = story_of(events).to_text()
+    assert "twice twice" not in text
+    assert "logged on over NTLM with admin rights 4 times (possible pass-the-hash)" in text
+
+
+def test_a_burst_longer_than_a_visit_is_not_recounted_as_plain_logons():
+    # 4 logons 8 min apart: one burst (each within burst_gap) spanning past VISIT_GAP
+    events = _admin_ntlm_logons(4, 0, minutes_apart=8, first_id=0x60)
+    text = story_of(events).to_text()
+    assert "logged on over NTLM with admin rights 4 times" in text
+    assert "network logon" not in text  # its later logons are the finding's, not extra logons
+
+
 def test_local_accounts_of_cloned_hosts_stay_apart():
     # Hosts cloned from one image share local SIDs: IEWIN7\IEUser is not PC01\IEUser.
     shared = "S-1-5-21-321-654-987-1000"

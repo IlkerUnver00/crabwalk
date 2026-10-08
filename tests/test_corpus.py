@@ -52,6 +52,12 @@ GROUND_TRUTH: list[tuple[str, str, str]] = [
     ("Lateral Movement/lm_sysmon_18_remshell_over_namedpipe.evtx", "T1021.002", "CW-012"),
     ("Lateral Movement/LM_ScheduledTask_ATSVC_target_host.evtx", "T1053.005", "CW-012"),
     ("Lateral Movement/LM_Remote_Service01_5145_svcctl.evtx", "T1021.002", "CW-012"),
+    ("Lateral Movement/LM_winrm_exec_sysmon_1_winrshost.evtx", "T1021.006", "CW-007"),
+    ("Lateral Movement/LM_impacket_docmexec_mmc_sysmon_01.evtx", "T1021.003", "CW-013"),
+    ("Lateral Movement/LM_DCOM_MSHTA_LethalHTA_Sysmon_3_1.evtx", "T1021.003", "CW-013"),
+    ("Lateral Movement/lateral_movement_startup_3_11.evtx", "T1547.001", "CW-014"),
+    ("Lateral Movement/LM_tsclient_startup_folder.evtx", "T1021.001", "CW-014"),
+    ("Lateral Movement/LM_sysmon_1_12_13_3_tsclient_SharpRdp.evtx", "T1021.001", "CW-015"),
 ]
 
 # (relative path, rule that must stay quiet): attacker activity of a different
@@ -61,6 +67,11 @@ NEGATIVE_TRUTH: list[tuple[str, str]] = [
     ("Discovery/discovery_bloodhound.evtx", "CW-012"),  # samr/lsarpc/srvsvc over IPC$
     ("Discovery/discovery_psloggedon.evtx", "CW-012"),
     ("Credential Access/remote_sam_registry_access_via_backup_operator_priv.evtx", "CW-012"),
+    # a local maldoc driving ShellBrowserWindow -> mshta: COM, but not activated from afar
+    ("Other/maldoc_mshta_via_shellbrowserwind_rundll32.evtx", "CW-013"),
+    # Startup-folder persistence written by local processes (powershell, cmd)
+    ("AutomatedTestingTools/PanacheSysmon_vs_AtomicRedTeam01.evtx", "CW-014"),
+    ("Defense Evasion/sysmon_2_11_evasion_timestomp_MACE.evtx", "CW-014"),
 ]
 
 pytestmark = pytest.mark.skipif(

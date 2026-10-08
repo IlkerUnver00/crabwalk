@@ -148,7 +148,7 @@ def test_extension_tunable_is_normalized():
     ({"rules": {"CW-001": {"window": "soon"}}}, "rules.CW-001.window"),
     ({"rules": {"CW-003": {"privileged_ntlm": "no"}}}, "expected true or false"),
     ({"rules": {"CW-012": {"enum_distinct_pipes": 0}}}, "whole number >= 1"),
-    ({"rules": {"CW-009": {"window": "1m"}}}, "CW-009 has no tunable settings"),
+    ({"rules": {"CW-011": {"window": "1m"}}}, "CW-011 has no tunable settings"),
     ({"allow": {"reason": "x"}}, r"\[\[allow\]\]"),
     ({"allow": [{"users": ["x"]}]}, "'reason' is required"),
     ({"allow": [{"reason": "x"}]}, "needs at least one of"),

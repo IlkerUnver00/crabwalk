@@ -4,9 +4,14 @@
         --hayabusa samples/tools/hayabusa --chainsaw samples/tools/chainsaw/chainsaw \\
         --out docs/benchmark/results.json
 
-Each tool runs on each file of the corpus's "Lateral Movement" folder on its
-own, with the rule set its release ships and its documented default
-invocation (no rule update, no tuning):
+    python scripts/benchmark.py --samples samples/EVTX-to-MITRE-Attack --folder . \\
+        --hayabusa samples/tools/hayabusa --chainsaw samples/tools/chainsaw/chainsaw \\
+        --skip-timing --out docs/benchmark/results-evtx-to-mitre-attack.json
+
+Each tool runs on each file under ``--folder`` (default: the corpus's "Lateral
+Movement" folder, subfolders included) on its own, with the rule set its
+release ships and its documented default invocation (no rule update, no
+tuning):
 
 * Hayabusa: ``dfir-timeline -f FILE -w`` (no wizard: all levels, noisy,
   deprecated and unsupported rules left off, as shipped), JSONL, verbose profile;
@@ -26,7 +31,9 @@ parsed in memory. The same criteria apply to every tool:
   T1080, T1072).
 
 The script also times one run of each tool over the whole corpus folder.
-It needs the two tools' release folders; nothing is downloaded.
+It needs the two tools' release folders; nothing is downloaded. After a
+change to crabwalk alone, ``--reuse`` keeps the engines' rows of an earlier
+run of the same corpus and engine versions and reruns only crabwalk.
 """
 
 from __future__ import annotations
@@ -143,9 +150,13 @@ def summarize(alerts: list[dict]) -> dict:
         "by_level": {lv: by_level[lv] for lv in LEVELS if by_level[lv]},
         "medium_plus": len(strong),
         "lateral_medium_plus": sum(a["lateral"] for a in strong),
-        "titles_medium_plus": sorted(Counter(a["title"] for a in strong).items(),
-                                     key=lambda kv: (-kv[1], kv[0]))[:8],
+        "titles_medium_plus": _top(a["title"] for a in strong),
+        "titles_lateral_medium_plus": _top(a["title"] for a in strong if a["lateral"]),
     }
+
+
+def _top(titles) -> list:
+    return sorted(Counter(titles).items(), key=lambda kv: (-kv[1], kv[0]))[:8]
 
 
 def aggregate(files: list[dict], tool: str) -> dict:
@@ -169,27 +180,59 @@ def timed(fn, *args) -> tuple[float, object]:
     return round(time.perf_counter() - start, 1), result
 
 
+def group_of(name: str) -> str:
+    """The top-level subfolder a file sits in ("." for files directly in the folder)."""
+    return name.split("/", 1)[0] if "/" in name else "."
+
+
+def git_info(repo: Path) -> tuple[str, str]:
+    def git(*args: str) -> str:
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True).stdout.strip()
+
+    url = git("remote", "get-url", "origin")
+    name = re.sub(r"\.git$", "", url.rstrip("/")).split("github.com/")[-1] if url else repo.name
+    return name, git("rev-parse", "HEAD")
+
+
+def _reusable_rows(path: Path, corpus_commit: str, versions: dict) -> dict[str, dict]:
+    """file -> {hayabusa, chainsaw} rows of an earlier run, which a crabwalk
+    change cannot affect. Refused unless corpus and engine versions match."""
+    prior = json.loads(path.read_text(encoding="utf-8"))
+    meta = prior["meta"]
+    if meta["corpus_commit"] != corpus_commit or any(
+            meta["versions"][tool] != versions[tool] for tool in ("hayabusa", "chainsaw")):
+        raise SystemExit(f"{path}: other corpus commit or engine versions; rerun the engines")
+    return {f["file"]: {tool: f["tools"][tool] for tool in ("hayabusa", "chainsaw")} for f in prior["files"]}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--samples", type=Path, required=True, help="EVTX-ATTACK-SAMPLES clone")
+    parser.add_argument("--samples", type=Path, required=True, help="EVTX corpus clone (a git checkout)")
+    parser.add_argument("--folder", default="Lateral Movement",
+                        help="folder under --samples to run on, subfolders included ('.' = whole corpus)")
     parser.add_argument("--hayabusa", type=Path, required=True, help="unpacked Hayabusa release folder")
     parser.add_argument("--chainsaw", type=Path, required=True, help="unpacked Chainsaw release folder")
     parser.add_argument("--out", type=Path, default=ROOT / "docs" / "benchmark" / "results.json")
     parser.add_argument("--skip-timing", action="store_true", help="skip the whole-corpus timing runs")
+    parser.add_argument("--reuse", type=Path,
+                        help="earlier results file of the same corpus commit and tool versions: "
+                             "its Hayabusa and Chainsaw rows are kept and only crabwalk is rerun")
     args = parser.parse_args(argv)
 
-    folder = args.samples / "Lateral Movement"
-    samples = sorted(folder.glob("*.evtx"), key=lambda p: p.name.lower())
-    corpus_commit = subprocess.run(["git", "-C", str(args.samples), "rev-parse", "HEAD"],
-                                   capture_output=True, text=True).stdout.strip()
+    folder = args.samples / args.folder
+    samples = sorted(folder.rglob("*.evtx"), key=lambda p: p.relative_to(folder).as_posix().lower())
+    corpus, corpus_commit = git_info(args.samples)
+    versions = tool_versions(args.hayabusa, args.chainsaw)
+    reused = _reusable_rows(args.reuse, corpus_commit, versions) if args.reuse else {}
     files = []
     for i, sample in enumerate(samples, 1):
-        print(f"[{i}/{len(samples)}] {sample.name}", file=sys.stderr)
-        files.append({"file": sample.name, "tools": {
-            "crabwalk": summarize(run_crabwalk(sample)),
+        name = sample.relative_to(folder).as_posix()
+        print(f"[{i}/{len(samples)}] {name}", file=sys.stderr)
+        engines = reused.get(name) or {
             "hayabusa": summarize(run_hayabusa(args.hayabusa, sample)),
             "chainsaw": summarize(run_chainsaw(args.chainsaw, sample)),
-        }})
+        }
+        files.append({"file": name, "tools": {"crabwalk": summarize(run_crabwalk(sample)), **engines}})
 
     timing = {}
     if not args.skip_timing:
@@ -201,16 +244,22 @@ def main(argv: list[str] | None = None) -> int:
             timing[tool] = {"seconds": seconds, **{k: v for k, v in summarize(alerts).items()
                                                     if k != "titles_medium_plus"}}
 
+    tools = ("crabwalk", "hayabusa", "chainsaw")
+    groups = sorted({group_of(f["file"]) for f in files})
     result = {
         "meta": {
-            "versions": tool_versions(args.hayabusa, args.chainsaw),
-            "corpus": "sbousseaden/EVTX-ATTACK-SAMPLES", "corpus_commit": corpus_commit,
-            "folder": "Lateral Movement", "files": len(samples),
+            "versions": versions,
+            "engine_rows_reused_from": args.reuse.name if reused else None,
+            "corpus": corpus, "corpus_commit": corpus_commit,
+            "folder": args.folder, "files": len(samples),
             "platform": f"{platform.system()} {platform.release()}, Python {platform.python_version()}",
             "criteria": {"medium_plus": sorted(MEDIUM_PLUS), "lateral": "tactic lateral movement or "
                          + ", ".join(LM_TECHNIQUES)},
         },
-        "summary": {tool: aggregate(files, tool) for tool in ("crabwalk", "hayabusa", "chainsaw")},
+        "summary": {tool: aggregate(files, tool) for tool in tools},
+        "summary_by_subfolder": {} if groups == ["."] else {
+            g: {tool: aggregate([f for f in files if group_of(f["file"]) == g], tool) for tool in tools}
+            for g in groups},
         "timing_whole_corpus": timing,
         "files": files,
     }

@@ -10,7 +10,7 @@ from ..models import NormalizedEvent
 from .antiforensics import EventLogCleared
 from .base import SEVERITY_RANK, Finding, HuntContext, Rule, evidence_key
 from .credentials import DCSync, Kerberoasting
-from .execution import SuspiciousPowerShell, WinRmExec, WmiExec
+from .execution import DcomExec, SuspiciousPowerShell, WinRmExec, WmiExec
 from .lateral import (
     AdminShareExecutable,
     PassTheHash,
@@ -19,6 +19,7 @@ from .lateral import (
     RemoteScheduledTask,
 )
 from .pipes import NamedPipeExecution
+from .remote_files import StartupFolderDrop, TsclientExecution
 
 ALL_RULES: tuple[type[Rule], ...] = (
     PsExecPattern,
@@ -33,6 +34,9 @@ ALL_RULES: tuple[type[Rule], ...] = (
     Kerberoasting,
     DCSync,
     NamedPipeExecution,
+    DcomExec,
+    StartupFolderDrop,
+    TsclientExecution,
 )
 
 

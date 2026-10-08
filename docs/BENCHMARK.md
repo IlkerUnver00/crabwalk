@@ -17,7 +17,7 @@ that alert tagged as lateral movement.
 
 | | Version | Rules | Invocation (per file) |
 |---|---|---|---|
-| crabwalk | 0.1.0 (this repository) | 12 | `crabwalk hunt FILE` |
+| crabwalk | 0.1.0 (this repository): commit `9d23709` for the first run, the current one for "now" | 12, now 15 | `crabwalk hunt FILE` |
 | Hayabusa | 4.1.0, `hayabusa-4.1.0-win-x64.zip` | 4,658 loaded (4,476 Sigma, 182 Hayabusa); noisy, deprecated and unsupported rules off, as shipped | `dfir-timeline -f FILE -w`, JSONL, `verbose` profile |
 | Chainsaw | 2.16.5, `chainsaw_all_platforms+rules.zip` | 3,758 loaded (bundled Sigma + Chainsaw rules) | `hunt FILE -s sigma/ --mapping mappings/sigma-event-logs-all.yml -r rules/`, JSONL |
 
@@ -44,15 +44,21 @@ that alert tagged as lateral movement.
 
 ## Results
 
-| Over the 47 files | crabwalk | Hayabusa 4.1.0 | Chainsaw 2.16.5 |
-|---|---|---|---|
-| Files with an alert at medium+ | 16 | **29** | 27 |
-| Files with a *lateral* alert at medium+ | **10** | 8 | 6 |
-| Alerts at medium+ | **34** | 130 | 110 |
-| Alerts, all levels | 34 | 1,221 (1,038 informational) | 180 |
-| Most alerts at medium+ in one file | 5 | 24 | 26 |
+The first run measured crabwalk at commit `9d23709` (12 rules). The rules added since,
+CW-013 to CW-015 and `winrs` in CW-007, were written from the files this run showed crabwalk
+missing, so the "crabwalk now" column is a score on the data they were built from, not a
+test of them. The [second corpus](#a-second-corpus-the-rules-never-saw) is that test.
 
-How the settings move these numbers:
+| Over the 47 files | crabwalk, first run | crabwalk now | Hayabusa 4.1.0 | Chainsaw 2.16.5 |
+|---|---|---|---|---|
+| Files with an alert at medium+ | 16 | 22 | **29** | 27 |
+| Files with a *lateral* alert at medium+ | 10 | **16** | 8 | 6 |
+| Alerts at medium+ | **34** | 41 | 130 | 110 |
+| Alerts, all levels | 34 | 41 | 1,221 (1,038 informational) | 180 |
+| Most alerts at medium+ in one file | 5 | 5 | 24 | 26 |
+
+A rerun of the two engines on the same files gave the same numbers. How the settings move
+them:
 
 - **Hayabusa without its experimental rules** (`-w --exclude-status experimental`):
   27 files at medium+, 7 with a lateral alert, 107 alerts at medium+.
@@ -61,12 +67,14 @@ How the settings move these numbers:
   - no file changes status.
 
 **Breadth goes to the rule engines.** Hayabusa raised a medium+ alert on 29 files and Chainsaw
-on 27; crabwalk did on 16. crabwalk stays silent on 18 files that Hayabusa or Chainsaw flag,
-almost all of them techniques it has no rule for:
+on 27; crabwalk did on 16 in the first run. It stayed silent on 18 files that Hayabusa or
+Chainsaw flag, almost all of them techniques it had no rule for:
 
-- DCOM (LethalHTA, MMC20 via impacket);
-- SharpRDP and RDP `tsclient` startup-folder drops;
-- WinRM through `winrshost.exe` (crabwalk's CW-007 knows `wsmprovhost.exe`);
+- DCOM (LethalHTA, MMC20 via impacket): now CW-013;
+- RDP `tsclient` startup-folder drops and a SharpRDP run from `\\tsclient`: now CW-014 and
+  CW-015; a startup-folder write over SMB: CW-014;
+- WinRM through `winrshost.exe`: now in CW-007, which knew only `wsmprovhost.exe`;
+- the other SharpRDP sample, which types its command into the Run dialog;
 - PsExec seen only through Sysmon process creation;
 - an IIS web shell, MSSQL `xp_cmdshell` and remote registry;
 - unsigned DLLs loaded into LSASS;
@@ -74,12 +82,12 @@ almost all of them techniques it has no rule for:
 - a local pass-the-hash seen through Sysmon;
 - a service install seen only in the System log, with no logon to tie it to.
 
-Hayabusa or Chainsaw flag those, mostly through Sysmon process, image-load and registry rules.
-For unknown evidence, start with one of them.
+Twelve of those files are still engine-only. Hayabusa or Chainsaw flag them, mostly through
+Sysmon process, image-load and registry rules. For unknown evidence, start with one of them.
 
 **Target-side share and WinRM logs go to crabwalk.** On five files, crabwalk raised a medium+
-alert and neither other tool did. Four are a target host's Security log of share access
-(5145); one is its WinRM/Operational log:
+alert and neither other tool did, in both runs. Four are a target host's Security log of
+share access (5145); one is its WinRM/Operational log:
 
 | File | crabwalk | Hayabusa | Chainsaw |
 |---|---|---|---|
@@ -89,9 +97,9 @@ alert and neither other tool did. Four are a target host's Security log of share
 | `LM_Remote_Service01_5145_svcctl.evtx` | medium: remote `svcctl` access | none | none |
 | `LM_winrm_target_wrmlogs_91_wsmanShellStarted_poorLog.evtx` | medium: WinRM shell started (WinRM/Operational 91) | none | none |
 
-**The lateral row measures tagging as much as detection.** crabwalk flagged 10 files with a
-lateral alert, Hayabusa 8 and Chainsaw 6. Of the files where only crabwalk has one, two are
-files where the engines also alert at medium+, just under other tags:
+**The lateral row measures tagging as much as detection.** In the first run crabwalk flagged
+10 files with a lateral alert, Hayabusa 8 and Chainsaw 6. Of the files where only crabwalk
+had one, two are files where the engines also alert at medium+, just under other tags:
 
 - `lm_sysmon_18_remshell_over_namedpipe.evtx`: all three alert on the same Sysmon 18 record.
   crabwalk's is medium, as remote execution over named pipes (T1021.002). Hayabusa and
@@ -104,12 +112,12 @@ files where the engines also alert at medium+, just under other tags:
   - crabwalk rates them medium+: the remote `atsvc` task registration (CW-012), and the NTLM
     admin logons as pass-the-hash indicators (CW-003).
 
-**Volume.** At medium+, crabwalk raised 34 alerts, Hayabusa 130 and Chainsaw 110. Of
-Hayabusa's 1,221 alerts at all levels, 1,038 are informational. 853 of those come from one
-file, because Hayabusa logs every file access on a non-`IPC$` share at informational level.
-Part of the gap is by design. A rule engine reports events one at a time, while crabwalk
-correlates them into findings: one CW-012 finding cites the share access, the pipe opens and
-the install of one PsExec run.
+**Volume.** At medium+, crabwalk raised 34 alerts in the first run (41 now), Hayabusa 130 and
+Chainsaw 110. Of Hayabusa's 1,221 alerts at all levels, 1,038 are informational. 853 of those
+come from one file, because Hayabusa logs every file access on a non-`IPC$` share at
+informational level. Part of the gap is by design. A rule engine reports events one at a
+time, while crabwalk correlates them into findings: one CW-012 finding cites the share
+access, the pipe opens and the install of one PsExec run.
 
 ## Cases
 
@@ -140,8 +148,8 @@ and `LM_WMI_4624_4688_TargetHost.evtx`).**
   (11:27Z) and the 4624s (22:15Z) land on that one edge as two dated steps about 11 hours
   apart. The records do not show that they are one hop.
 
-**The nine demo recordings together (`demo/evtx`).** Over the demo set crabwalk raises 14
-alerts, Hayabusa 125 and Chainsaw 57, of which Hayabusa and Chainsaw each rate 40 medium+.
+**The nine demo recordings together (`demo/evtx`).** Over the demo set crabwalk raises 13
+alerts (14 in the first run, before CW-003 grouped a burst), Hayabusa 125 and Chainsaw 57, of which Hayabusa and Chainsaw each rate 40 medium+.
 Only crabwalk links hosts into a path, NLLT108334 → PC01 → WIN-77LTAPHIQ1R. That path shows
 what the linking does, not proof of an intrusion:
 
@@ -163,19 +171,118 @@ each tool started as a process:
 Single runs varied by up to half: Chainsaw took 18.3 s once. This does not mean crabwalk is
 faster at the same job:
 
-- crabwalk keeps about 3,000 of the 37,364 records, the event IDs its 12 rules read, and
-  evaluates 12 rules.
+- crabwalk keeps about 3,000 of the 37,364 records, the event IDs its rules read, and
+  evaluated 12 rules at the time (15 now).
 - The other two evaluate thousands of rules over every record.
 
 The point is practical: crabwalk adds about a second to a triage run that already uses one
 of them.
+
+## A second corpus the rules never saw
+
+Everything above runs on the corpus crabwalk's rules were written on. To see what that is
+worth, the same three tools ran over a second one:
+[EVTX-to-MITRE-Attack](https://github.com/mdecrevoisier/EVTX-to-MITRE-Attack) by
+mdecrevoisier (CC0, commit `4748560`). It has 293 recordings: 280 in one folder per ATT&CK
+tactic, 18 of them under `TA0008-Lateral Movement`; 11 attack steps in one lab domain under
+`EVTX_full_APT_attack_steps`; and 2 Defender logs. No crabwalk rule was written against it. By content the two
+corpora share one file, a SID-history sample outside lateral movement. For the engines it is
+not unseen: Hayabusa's own sample collection,
+[hayabusa-sample-evtx](https://github.com/Yamato-Security/hayabusa-sample-evtx), includes
+both corpora.
+
+**How it was run.**
+
+1. **Blind.** All 293 files, each on its own, with crabwalk at commit `9d23709`, the version
+   measured above, before any of the corpus's records were read. Raw numbers:
+   [`benchmark/results-evtx-to-mitre-attack-blind.json`](benchmark/results-evtx-to-mitre-attack-blind.json).
+2. **Then** the misses and the wrong alerts were read, and crabwalk changed. Each change is
+   listed below with what led to it.
+3. **Again.** crabwalk alone was rerun on the same files; the engines' rows were kept
+   (`--reuse`): [`benchmark/results-evtx-to-mitre-attack.json`](benchmark/results-evtx-to-mitre-attack.json).
+
+**Blind results.**
+
+| | crabwalk | Hayabusa 4.1.0 | Chainsaw 2.16.5 |
+|---|---|---|---|
+| `TA0008-Lateral Movement` (18 files): files with an alert at medium+ | 4 | **11** | 7 |
+| ... files with a *lateral* alert at medium+ | 3 | **6** | 5 |
+| ... alerts at medium+ | 5 | 130 | 13 |
+| `EVTX_full_APT_attack_steps` (11 files): files with a *lateral* alert at medium+ | **7** | **7** | 4 |
+| All 293 files: files with an alert at medium+ | 53 | **148** | 117 |
+| ... files with a *lateral* alert at medium+ | 17 | **27** | 15 |
+| ... alerts at medium+ | 180 | 2,000 | 1,352 |
+| ... alerts, all levels | 180 | 7,860 | 1,903 |
+
+**On unseen data the lateral-movement lead is gone.** In the lateral-movement folder crabwalk
+raised a lateral alert on 3 of 18 files, Hayabusa on 6 and Chainsaw on 5. What crabwalk
+missed and an engine caught:
+
+- RDP session hijacking with `tscon` (two files, both engines);
+- an RDP logon denied to a valid account (4825, both engines);
+- an MMC20 DCOM activation seen in 4688 (Hayabusa);
+- an OpenSSH server listening (Hayabusa, which tags it lateral movement).
+
+On the pass-the-hash file all three alert. Some files in that folder record preparation
+rather than movement (a share created, a print share modified, a WS-Management listener
+enumerated), and no tool raises a lateral alert on them.
+
+**What it catches, it catches across the tactic folders.** Outside the lateral-movement
+folder crabwalk raised lateral alerts on 14 files: remote execution and remote credential
+theft over SMB filed under Execution and Credential Access (impacket's wmiexec, atexec and
+secretsdump, lsassy, service creation over named pipes) and under the attack chains. One
+was wrong: a PsExec run on its own host, reported as critical lateral movement (fixed
+below). Hayabusa raised lateral alerts on 21 files outside the folder and Chainsaw on 10.
+Both also tag that local PsExec file, through a rule that matches the PsExec binary starting.
+
+**The attack steps are where linking shows.** Over the 11 step recordings together,
+crabwalk joins 7 hosts into one path and puts a caution in front of it: the steps are up to
+176 days apart and only share addresses and names. No engine output links hosts.
+
+**What the second corpus changed.** Four changes came from reading its results:
+
+| Change | What led to it | Effect on this corpus |
+|---|---|---|
+| CW-012: PsExec run against its own host is *local*, also when its service pipe is reached over SMB loopback | `PSexec as system execution` was reported as critical lateral movement. The first corpus's local sample used a renamed service, so its loopback connect never matched a tool pipe and the gap stayed hidden | that file: medium, local, no lateral technique |
+| CW-003: one finding per burst of privileged NTLM logons (same source, account and host) | one run of 14 logons in 8 seconds gave 14 findings that differed only in their time | 180 alerts become 156 |
+| CW-009: clearing every log at once is one finding (same host and account, each clear within a minute of the previous) | 91 log clears in one file gave 91 findings, one per channel: a System and a Security clear minutes apart, then 89 channels within 3 s | that file: 91 findings become 3 |
+| CW-013: a DCOM server activated in a remote caller's network logon counts by itself | the MMC20 activation file: `mmc.exe -Embedding` in a logon from `10.23.123.11`, no command in the capture | lateral-movement folder: +1 file |
+
+Written from the first corpus only, before the blind results were read: CW-013's main logic
+(children of activated COM servers, mshta's LethalHTA activation), CW-014 (Startup folders
+written over SMB or RDP), CW-015 (programs run from `\\tsclient`), `winrs` for CW-007 and
+the logon-session source for CW-006/CW-007. This corpus has no Startup-folder drop, no
+`\\tsclient` run and no `winrs` recording, and its one target-side DCOM file has no child
+process, so those rules did not fire here, and none of them fired by mistake on 293
+recordings of other attacks. The logon-session source did fire: on the wmiexec step it names
+`10.23.123.11` for the WMI children, which moves that step onto the attacker's edge in the
+story and changes no count. The source side of a DCOM call (a PowerShell script block
+creating `MMC20.Application` on another host, the folder's second DCOM file) is not
+detected.
+
+An adversarial review of the new code then fixed how the new rules pick their sources
+(connection direction, process IDs on 4688, RDP sessions, LogonIds reused across boots,
+time-bounded host addresses) and a case where a remote PsExec next to a local one could be
+called local. None of those changes moved the numbers on either corpus.
+
+**After the changes** crabwalk flags 5 files of the lateral-movement folder at medium+, 4 of
+them with a lateral alert (one through the CW-013 change this corpus prompted), and 54 of the
+293 files, 17 with a lateral alert, with 69 alerts in all (180 blind). In the attack steps 6
+files carry a lateral alert, since the local PsExec run no longer does. The engines still
+lead on the lateral-movement folder.
+
+**Known limitation it showed.** When two rules credit one service install to different
+accounts, merging keeps both findings, since a merge never drops an actor, and the story tells
+the install twice in one line. Here CW-012's pipe activity holds opens by two accounts from
+`10.23.123.11` (`hack1` on a random-named pipe, `admmhorvath` on `svcctl`) and it names
+`hack1`, while CW-001 names `admmhorvath` from the 4624 that preceded the install.
 
 ## What this does not show
 
 - **Detection quality in the wild.** These are lab recordings, one technique each, so there
   are no false positives to count. The rule engines' alerts on these files are mostly true;
   their cost is volume.
-- **Lateral movement as a whole.** The folder is one author's collection of 47 recordings,
+- **Lateral movement as a whole.** The two folders hold 47 and 18 recordings by two authors,
   and many techniques appear once or not at all. Ten or so files of a technique crabwalk does
   not cover would move its numbers a lot.
 - **Other settings.** The ranges above show how much the rule sets matter. A minimum level of

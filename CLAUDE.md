@@ -31,6 +31,13 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   step's own records name them; accounts joined by SID except local ones (cloned images
   share local SIDs); gaps > 7 days get a caution before the steps; to_text uses ASCII
   arrows. Changing a rule's wording changes quoted output in README/docs/writeups.
+- Sources of spawned processes: execution._spawn_source() (the remote 4624 session of the
+  process's LogonId) for WMI/WinRM/DCOM/tsclient children. Sysmon 3: never trust
+  Source/Destination as local/remote (inbound records put this host on either side); use
+  HuntContext.connection_peer(), which returns None when the record cannot tell.
+- Sysmon 11 is kept only for Startup-folder files (catalog CONTENT_FILTERS), like Sysmon 13
+  for service ImagePath writes. Every technique ID a rule emits needs a name in attack.py
+  (a test scans the rules).
 - HuntContext.service_installs merges 7045 + 4697 + Sysmon 13 (Services\*\ImagePath);
   use it instead of reading 7045 directly so rules work on Sysmon-only exports.
 - catalog.CONTENT_FILTERS narrows high-volume IDs (Sysmon 13) at parse time; parser
@@ -92,7 +99,11 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
 - `samples/` is gitignored — local EVTX test data lives there, and the benchmark's tool
   releases under `samples/tools/` (Hayabusa 4.1.0, Chainsaw 2.16.5, SHA-256 in
   docs/BENCHMARK.md). `scripts/benchmark.py` reruns the comparison (a few minutes) into
-  docs/benchmark/results.json. Never write the tools' raw alerts to disk: they copy the
+  docs/benchmark/results.json; `--folder .` runs a whole corpus (subfolders grouped),
+  `--reuse OLD.json` keeps the engines' rows and reruns only crabwalk. Second corpus
+  (hold-out) = `samples\EVTX-to-MITRE-Attack` (mdecrevoisier, CC0): never design or tune a
+  rule on its records; `results-evtx-to-mitre-attack-blind.json` is the run before any change,
+  and BENCHMARK.md lists every change it prompted. Never write the tools' raw alerts to disk: they copy the
   samples' malware command lines and Windows Defender flags/quarantines such files —
   parse stdout in memory (the script does). Hayabusa's channel filter skips Sigma rules
   without a Channel: run raw rules with `-A`. Chainsaw rejects `|re|i` (see sigma/README).

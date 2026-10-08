@@ -250,6 +250,57 @@ def test_local_psexec_client_marks_local_execution():
     assert "psexec64.exe" in finding.summary
 
 
+def _psexec_s_on_its_own_host(computer="FS03VULN.corp.local"):
+    # `PsExec64 -i -s cmd` on FS03VULN (EVTX-to-MITRE-Attack's "PSexec as system
+    # execution"): the service pipe is reached over SMB loopback, so Sysmon logs
+    # that connect as "System"; the client opens the stdio pipes itself.
+    stdio = [f"PSEXESVC-FS03VULN-2124-{s}" for s in ("stdin", "stdout", "stderr")]
+    return [
+        sysmon_pipe("PSEXESVC", connect=False, image=r"C:\Windows\PSEXESVC.exe", computer=computer),
+        sysmon_pipe("PSEXESVC", seconds=0.1, computer=computer),
+        *(sysmon_pipe(p, connect=False, image=r"C:\Windows\PSEXESVC.exe", seconds=0.1, computer=computer)
+          for p in stdio),
+        *(sysmon_pipe(p, image=r"C:\TOOLS\PsExec64.exe", seconds=0.2, computer=computer) for p in stdio),
+    ]
+
+
+def test_psexec_against_its_own_host_over_smb_loopback_is_local():
+    (finding,) = cw012(*_psexec_s_on_its_own_host())
+    assert finding.title.startswith("Local execution")
+    assert "T1021.002" not in finding.techniques
+    assert (finding.src_ip, finding.src_host) == (None, None)
+
+
+def test_a_remote_client_on_the_service_pipe_is_not_excused_as_loopback():
+    computer = "FS03VULN.corp.local"
+    (finding,) = cw012(*_psexec_s_on_its_own_host(computer),
+                       ipc("PSEXESVC", ip="10.6.6.6", seconds=0.1, computer=computer))
+    assert finding.title == "Remote execution over named pipes"
+    assert "T1021.002" in finding.techniques
+
+
+def test_a_local_run_excuses_only_its_own_loopback_connect():
+    # Sysmon-only: a remote client opens \PSEXESVC 30 s after a local loopback run (or
+    # before it): that connect is not the local run's, so the cluster is remote
+    computer = "FS03VULN.corp.local"
+    for seconds in (30, -30):
+        (finding,) = cw012(*_psexec_s_on_its_own_host(computer), sysmon_pipe("PSEXESVC", seconds=seconds,
+                                                                             computer=computer))
+        assert finding.title == "Remote execution over named pipes", seconds
+        assert "T1021.002" in finding.techniques
+
+
+def test_a_remote_run_beside_a_local_one_takes_its_own_source_host():
+    computer = "FS03VULN.corp.local"
+    remote = [ipc(f"PSEXESVC-ATTACKER-4242-{s}", ip="10.6.6.6", seconds=0.5, computer=computer)
+              for s in ("stdin", "stdout", "stderr")]
+    findings = cw012(*_psexec_s_on_its_own_host(computer), ipc("PSEXESVC", ip="10.6.6.6", seconds=0.4,
+                                                               computer=computer), *remote)
+    lateral = [f for f in findings if f.title == "Remote execution over named pipes"]
+    assert lateral and all(f.src_host != "FS03VULN" for f in lateral)
+    assert any((f.src_ip, f.src_host) == ("10.6.6.6", "ATTACKER") for f in lateral)
+
+
 def test_stdio_pipes_naming_this_host_are_local():
     (finding,) = cw012(
         sysmon_pipe("svc-SRV01-12-stdin", connect=False, image=r"C:\Windows\svc.exe",

@@ -244,6 +244,53 @@ def test_pth_privileged_ntlm_needs_4672():
     assert finding.severity == "medium"
 
 
+def _admin_ntlm(logon_id, minutes, ip="10.0.0.5", user="admin", station="WS01"):
+    return [remote_logon(logon_id, minutes=minutes, user=user, IpAddress=ip, WorkstationName=station,
+                         AuthenticationPackageName="NTLM"),
+            ev(4672, minutes=minutes, SubjectLogonId=logon_id)]
+
+
+def test_pth_burst_of_privileged_ntlm_logons_is_one_finding():
+    # a tool opens a session per operation, and a client may send a different made-up
+    # workstation name each time: one run on one host is one finding, not one per logon.
+    events = [e for i in range(5) for e in _admin_ntlm(f"0x{i + 1:X}0", i * 2, station=f"RND{i}")]
+    (finding,) = by_rule(findings_for(*events), "CW-003")
+    assert len(finding.evidence) == 5
+    assert finding.summary.startswith("5 privileged NTLM network logons from 10.0.0.5 over 8 min")
+    assert "workstations: RND0, RND1, RND2 (+2 more)" in finding.summary
+    # the story counts the burst through `count`, so the phrase itself carries no number
+    assert finding.action == "logged on over NTLM with admin rights (possible pass-the-hash)"
+    assert finding.count == 5
+    assert (finding.src_ip, finding.src_host) == ("10.0.0.5", None)  # names disagree: none is the source
+
+
+def test_pth_burst_names_a_source_only_when_every_logon_does():
+    one_named = [*_admin_ntlm("0x10", 0, station="-"), *_admin_ntlm("0x20", 1, station="WS01")]
+    (finding,) = by_rule(findings_for(*one_named), "CW-003")
+    assert finding.src_host is None  # the first logon never claimed WS01
+    ip_less = [*_admin_ntlm("0x10", 0, ip="-", station="WS01"), *_admin_ntlm("0x20", 1, ip="-", station="ws01")]
+    (finding,) = by_rule(findings_for(*ip_less), "CW-003")
+    assert finding.src_host == "WS01" and "workstation: WS01" in finding.summary
+
+
+def test_pth_burst_counts_a_logon_kept_in_two_exports_once():
+    logon, privileges = _admin_ntlm("0x10", 0)
+    copy = ev(4624, record_id=9999, **logon.data)  # same logon, renumbered by a second export
+    (finding,) = by_rule(findings_for(logon, privileges, copy), "CW-003")
+    assert finding.count == 1 and len(finding.evidence) == 1
+
+
+def test_pth_bursts_split_on_gap_source_and_account():
+    events = [*_admin_ntlm("0x10", 0), *_admin_ntlm("0x20", 9),  # one burst, 9 min apart
+              *_admin_ntlm("0x30", 30),  # past burst_gap: a new one
+              *_admin_ntlm("0x40", 31, ip="10.0.0.6"),  # another source
+              *_admin_ntlm("0x50", 32, user="other")]  # another account
+    findings = sorted(by_rule(findings_for(*events), "CW-003"), key=lambda f: f.timestamp)
+    assert [len(f.evidence) for f in findings] == [2, 1, 1, 1]
+    assert findings[0].src_host == "WS01"
+    assert findings[0].count == 2
+
+
 def test_remote_scheduled_task():
     task = ev(
         4698, minutes=1, SubjectLogonId="0x3E7A", TaskName=r"\Microsoft\evil",
@@ -359,6 +406,21 @@ def test_log_cleared_and_dedup():
     findings = by_rule(findings_for(*events), "CW-009")
     assert len(findings) == 1
     assert findings[0].user == "CORP\\admin"
+    assert len(findings[0].evidence) == 1
+
+
+def test_clearing_every_log_at_once_is_one_finding():
+    # `wevtutil cl` over every channel: one 104 per channel, seconds apart (EVTX-to-MITRE-Attack)
+    who = {"SubjectUserName": "admin", "SubjectDomainName": "CORP"}
+    channels = ["Application", "System", "Windows PowerShell", "Microsoft-Windows-Sysmon/Operational"]
+    events = [ev(104, channel=SYSTEM, minutes=i / 60, Channel=c, **who) for i, c in enumerate(channels)]
+    events += [ev(1102, minutes=0.1, **who),
+               ev(104, channel=SYSTEM, minutes=30, Channel="Application", **who),  # later: a new clear
+               ev(104, channel=SYSTEM, computer="SRV02", Channel="System", **who)]  # another host
+    findings = sorted(by_rule(findings_for(*events), "CW-009"), key=lambda f: (f.host, f.timestamp))
+    assert [len(f.evidence) for f in findings] == [5, 1, 1]
+    assert findings[0].action == "cleared 5 event logs (Application, System, Windows PowerShell and 2 more)"
+    assert findings[1].action == "cleared the 'Application' log"
 
 
 def test_findings_sorted_worst_first():
@@ -371,3 +433,16 @@ def test_findings_sorted_worst_first():
     )
     assert [f.rule_id for f in findings][0] == "CW-001"  # critical first
     assert findings[0].severity == "critical"
+
+
+def test_every_technique_a_rule_can_emit_has_a_name():
+    # reports and the ATT&CK summary print technique_name(); a missing entry prints the ID twice
+    import re
+    from pathlib import Path
+
+    from crabwalk.attack import TECHNIQUES
+
+    rules_dir = Path(__file__).resolve().parent.parent / "src" / "crabwalk" / "rules"
+    emitted = {t for path in rules_dir.glob("*.py")
+               for t in re.findall(r'"(T\d{4}(?:\.\d{3})?)"', path.read_text(encoding="utf-8"))}
+    assert emitted and emitted <= set(TECHNIQUES), sorted(emitted - set(TECHNIQUES))

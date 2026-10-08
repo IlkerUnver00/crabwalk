@@ -85,6 +85,7 @@ CATALOG: dict[tuple[str, int], str] = {
     # --- Sysmon (optional enrichment when present) ---
     (SYSMON, 1): "Sysmon: process created",
     (SYSMON, 3): "Sysmon: network connection",
+    (SYSMON, 11): "Sysmon: file created in a Startup folder",  # narrowed by CONTENT_FILTERS
     (SYSMON, 13): "Sysmon: service ImagePath set",  # narrowed by CONTENT_FILTERS
     (SYSMON, 17): "Sysmon: named pipe created",
     (SYSMON, 18): "Sysmon: named pipe connected",
@@ -95,15 +96,26 @@ CATALOG: dict[tuple[str, int], str] = {
 SERVICE_IMAGE_PATH = re.compile(
     r"\\(?:currentcontrolset|controlset\d{3})\\services\\[^\\]+\\imagepath$", re.IGNORECASE
 )
+# A user's or the all-users Startup folder: whatever lands there runs at logon.
+# Each folder may also be written by its 8.3 short name (STARTM~1\PROGRA~1\STARTU~1).
+STARTUP_FOLDER = re.compile(
+    r"\\(?:start menu|startm~\d+)\\(?:programs|progra~\d+)\\(?:startup|startu~\d+)\\[^\\]", re.IGNORECASE
+)
 
 
 def _is_service_image_path(event: NormalizedEvent) -> bool:
     return bool(SERVICE_IMAGE_PATH.search(str(event.get("TargetObject") or "")))
 
 
+def _is_startup_file(event: NormalizedEvent) -> bool:
+    return bool(STARTUP_FOLDER.search(str(event.get("TargetFilename") or "")))
+
+
 #: Catalog entries that are only kept when the payload matches. Sysmon 13 fires
-#: for every registry write on a busy host; only service installs matter here.
+#: for every registry write and Sysmon 11 for every file created on a busy
+#: host; only service installs and Startup-folder files matter here.
 CONTENT_FILTERS: dict[tuple[str, int], Callable[[NormalizedEvent], bool]] = {
+    (SYSMON, 11): _is_startup_file,
     (SYSMON, 13): _is_service_image_path,
 }
 
