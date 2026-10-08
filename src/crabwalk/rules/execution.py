@@ -7,6 +7,7 @@ from collections.abc import Iterator
 
 from ..catalog import POWERSHELL, SECURITY, SYSMON, WINRM
 from ..models import NormalizedEvent
+from ..sessions import display_user
 from .base import Finding, HuntContext, Rule, basename
 
 SHELLS = {
@@ -46,7 +47,7 @@ def _process_pairs(ctx: HuntContext) -> Iterator[tuple[NormalizedEvent, str, str
             event,
             basename(event.get("ParentProcessName")),
             basename(event.get("NewProcessName")),
-            str(event.get("SubjectUserName") or "-"),
+            display_user(event.get("SubjectDomainName"), event.get("SubjectUserName")),
         )
 
 

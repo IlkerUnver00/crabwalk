@@ -50,6 +50,9 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
       Security 5145, recovering the attacker's source host from PsExec pipe names
 - [x] **Step 10** — Attack-path graph (`--graph`, and in the report): one node per
       machine, movement and source-aware findings as directed edges
+- [x] **Step 11** — Tuning layer (`--config`): rule selection, tunable correlation
+      windows, and an allowlist where every suppression carries a reason and can
+      expire; suppressed findings stay visible
 
 ## Quickstart
 
@@ -60,6 +63,8 @@ crabwalk sessions C:\evidence\logs --out sessions.json
 crabwalk hunt C:\evidence\logs --out findings.json
 crabwalk hunt C:\evidence\logs --report report.html --layer navigator.json
 crabwalk hunt C:\evidence\logs --graph attack-paths.html
+crabwalk config --example > crabwalk.toml
+crabwalk hunt C:\evidence\logs --config crabwalk.toml --show-suppressed
 ```
 
 `parse` walks files or directories, keeps only the events that matter for
@@ -115,6 +120,56 @@ vis.js, …). The HTML report embeds the same graph.
 - **Read left to right.** Hosts are layered by longest path, with cycles broken
   in time order, so origin → hop → target lines up; origins are labeled.
 
+## Tuning and allowlisting
+
+Every environment has backup agents, deployment tools and admins whose normal work
+looks like lateral movement. A TOML file tunes crabwalk to it without code changes:
+
+```toml
+[rules]
+disable = ["CW-009"]          # or: only = ["CW-012", "CW-001"]
+min_severity = "medium"
+
+[rules.CW-003]
+privileged_ntlm = false       # keep the sekurlsa::pth signature, drop the noisy half
+
+[rules.CW-012]
+cluster_gap = "3m"
+
+[[allow]]
+reason = "SCCM client push installs ccmsetup"   # required
+rules = ["CW-001", "CW-012"]                    # optional, default all rules
+users = ["CORP\\svc_sccm"]                      # globs; a bare name matches any domain
+sources = ["10.0.5.0/24"]                       # client IP/CIDR, or source host glob
+expires = 2026-12-31                            # optional: allowlists rot
+[allow.fields]                                  # regex on the evidence events
+ServiceName = "^ccmsetup$"
+```
+
+- **Generated, never stale.** `crabwalk config --example` prints every rule's
+  tunables with their defaults, read from the rules themselves, all commented
+  out. `crabwalk config FILE` validates a file and shows what will apply.
+- **Strict.** Unknown keys, rule ids, CIDRs and regexes are errors with a
+  pointer to the offending line. A typo in a suppression list must never pass
+  quietly. A CIDR with host bits (`10.0.5.0/2`) is refused rather than widened,
+  and an address-shaped typo (`10.0.5.300`) is refused rather than kept as a
+  host glob that never matches. An `[[allow]]` entry needs a reason and at least
+  one criterion; silencing a rule outright is what `disable` is for.
+- **Narrow by construction.** A field regex must hold for *every* evidence event
+  that carries the field, so one benign event cannot excuse the rest of a
+  finding. A domain-qualified user (`CORP\svc`) matches either notation of that
+  domain (`svc@corp.local`), but never a record that does not show its domain; a
+  bare name matches any domain. Field names are case-insensitive, and a field
+  name that occurs in none of the evidence it is meant to match is reported as
+  a likely typo.
+- **Nothing disappears silently.** Suppressed findings are counted on the
+  console (`--show-suppressed` lists them), written to the JSON output with the
+  allow entry that matched, and listed in the HTML report. Expired entries are
+  reported and not applied. The JSON also records the effective settings next
+  to the findings they produced.
+- Command-line flags layer over the file: `--rule ID` (run only), `--disable ID`,
+  `--min-severity LEVEL`.
+
 ## Detection rules
 
 | Rule | Title | ATT&CK | Notes |
@@ -136,7 +191,7 @@ vis.js, …). The HTML report embeds the same graph.
 
 - **Minimal dependencies.** DFIR workstations are often offline; the only runtime
   dependency is the Rust-backed [`evtx`](https://github.com/omerbenamram/pyevtx-rs)
-  parser.
+  parser (plus `tomli` on Python 3.10 only, where `tomllib` is not yet stdlib).
 - **Dirty inputs are normal.** A file that cannot be opened (zero bytes, locked,
   not EVTX) or a record that cannot be read is counted and reported, never fatal;
   the run only exits non-zero when nothing at all could be read.

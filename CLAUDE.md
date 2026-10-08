@@ -3,7 +3,8 @@
 EVTX lateral movement hunter (portfolio project for SOC/DFIR job applications).
 Conversation with the user is in Turkish; code, comments and docs stay in English.
 
-- Python >= 3.10, src layout, hatchling build. Runtime dep: `evtx` only. Dev: pytest.
+- Python >= 3.10, src layout, hatchling build. Runtime dep: `evtx` (+ `tomli` on 3.10
+  only). Dev: pytest. Commits: no "Co-Authored-By: Claude" trailer in this repo.
 - Venv: `.venv\Scripts\python.exe`; tests: `.venv\Scripts\python.exe -m pytest tests -q`
 - CLI: `crabwalk parse <paths> [--all | --event-id N | --channel X] [--out f.jsonl]`
        `crabwalk sessions <paths> [--include-machine] [--out f.json]`
@@ -31,6 +32,14 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   PsExec stdio pipes "<svc>-<SOURCEHOST>-<pid>-stdin" name the machine PsExec ran on.
 - Rules live in `src/crabwalk/rules/` (base.py = Rule/Finding/HuntContext; one module
   per theme). New rule: subclass Rule, add to ALL_RULES in rules/__init__.py, test it.
+- config.py = TOML tuning layer (`hunt --config`, `crabwalk config [FILE|--example]`).
+  A rule exposes a knob by giving it a class-level default and listing its name in
+  `tunables`; the default's type (bool/timedelta/int/tuple) decides parsing, and
+  `crabwalk config --example` picks it up automatically (a test enforces it). Read
+  tunables from `self`, never from module constants. Allowlist suppresses findings
+  AFTER the rules run; suppressed ones must stay visible (CLI count, JSON, report).
+- Machine accounts: always `hosts.is_machine_account()` (handles `DOM\PC$`,
+  `PC$@REALM`); never `endswith("$")` inline.
 - Test data: `samples\EVTX-ATTACK-SAMPLES` (sbousseaden repo, shallow clone, gitignored);
   integration check: `crabwalk sessions "samples\EVTX-ATTACK-SAMPLES\Lateral Movement"`
 - tests/test_corpus.py = ground-truth harness (filename->technique), skips if corpus

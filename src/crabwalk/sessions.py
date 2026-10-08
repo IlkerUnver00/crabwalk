@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from .catalog import SECURITY, TS_LSM
-from .hosts import is_local_address
+from .hosts import is_local_address, is_machine_account
 from .models import NormalizedEvent
 
 LOGON_TYPE_LABELS = {
@@ -94,7 +94,7 @@ class LogonSession:
 
     @property
     def is_machine_account(self) -> bool:
-        return self.user.endswith("$")
+        return is_machine_account(self.user)
 
     @property
     def duration_seconds(self) -> float | None:
@@ -135,7 +135,7 @@ class MovementEdge:
 
     @property
     def is_machine_account(self) -> bool:
-        return self.user.endswith("$")
+        return is_machine_account(self.user)
 
     @property
     def src(self) -> str:

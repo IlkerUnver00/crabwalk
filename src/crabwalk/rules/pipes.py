@@ -63,13 +63,22 @@ CONTROL_PIPES = {"svcctl": "service-control", "ntsvcs": "service-control", "atsv
 RANDOM_PIPE = re.compile(r"^[0-9a-f]{16,}$", re.I)
 EXECUTABLE = (".exe", ".dll", ".bat", ".ps1", ".cmd", ".scr")
 
-CLUSTER_GAP = timedelta(seconds=120)  # hits further apart start a new cluster
-FOLLOW_WINDOW = timedelta(seconds=120)  # install/task after the pipe activity
-DROP_WINDOW = timedelta(seconds=300)  # binary copied to ADMIN$ before it
-SKEW = timedelta(seconds=5)  # tolerance between channels of one host
-ENUM_WINDOW = timedelta(seconds=30)
-ENUM_DISTINCT_PIPES = 5
 _KIND_RANK = {"tool": 2, "control": 1, "random": 0}
+
+
+@dataclass(frozen=True)
+class PipeWindows:
+    """The time windows and thresholds CW-012 correlates with (all tunable)."""
+
+    cluster_gap: timedelta = timedelta(seconds=120)  # hits further apart start a new cluster
+    follow_window: timedelta = timedelta(seconds=120)  # install/task after the pipe activity
+    drop_window: timedelta = timedelta(seconds=300)  # binary copied to ADMIN$ before it
+    skew: timedelta = timedelta(seconds=5)  # tolerance between channels of one host
+    enum_window: timedelta = timedelta(seconds=30)  # a sweep's span around a cluster
+    enum_distinct_pipes: int = 5  # distinct pipes that make a client's activity a sweep
+
+
+DEFAULT_WINDOWS = PipeWindows()
 
 
 @dataclass(slots=True)
@@ -128,7 +137,7 @@ def pipe_name(value: object) -> str:
     return str(value or "").strip().lstrip("\\").strip()
 
 
-def pipe_hits(ctx: HuntContext) -> list[PipeHit]:
+def pipe_hits(ctx: HuntContext, w: PipeWindows = DEFAULT_WINDOWS) -> list[PipeHit]:
     """Every named-pipe open/create from Sysmon 17/18 and Security 5145 on IPC$."""
     hits: list[PipeHit] = []
     for event in ctx.events_for(SYSMON, 17, 18):
@@ -149,18 +158,18 @@ def pipe_hits(ctx: HuntContext) -> list[PipeHit]:
         hits.append(PipeHit(event.timestamp, event.computer, name, remote, ip, user, event,
                             peer=ip if remote else None))
     hits.sort(key=lambda h: (h.timestamp, h.computer, h.pipe))
-    _attribute_sysmon_hits(hits)
+    _attribute_sysmon_hits(hits, w)
     return hits
 
 
-def _attribute_sysmon_hits(hits: list[PipeHit]) -> None:
+def _attribute_sysmon_hits(hits: list[PipeHit], w: PipeWindows) -> None:
     """Give address-less Sysmon hits the client of the matching 5145 record.
 
     On a host that logs both, every remote pipe open appears twice: as a
     Sysmon 18 (Image "System", no address) and as a 5145 with IpAddress. Take
-    the nearest same-pipe 5145 open within SKEW; for a pipe creation (17,
+    the nearest same-pipe 5145 open within the skew; for a pipe creation (17,
     logged by the service side shortly before its client connects), accept the
-    one client that opened that pipe within CLUSTER_GAP if it is unambiguous.
+    one client that opened that pipe within the cluster gap if it is unambiguous.
     """
     opens: dict[tuple[str, str], list[PipeHit]] = {}
     for hit in hits:
@@ -170,11 +179,11 @@ def _attribute_sysmon_hits(hits: list[PipeHit]) -> None:
         if hit.peer is not None or hit.event.channel != SYSMON or hit.is_local_connect:
             continue
         candidates = opens.get((hit.computer, hit.pipe.lower()), [])
-        close = [c for c in candidates if abs(c.timestamp - hit.timestamp) <= SKEW]
+        close = [c for c in candidates if abs(c.timestamp - hit.timestamp) <= w.skew]
         if close:
             hit.peer = min(close, key=lambda c: (abs(c.timestamp - hit.timestamp), c.peer or "")).peer
             continue
-        nearby = {c.peer for c in candidates if abs(c.timestamp - hit.timestamp) <= CLUSTER_GAP}
+        nearby = {c.peer for c in candidates if abs(c.timestamp - hit.timestamp) <= w.cluster_gap}
         if len(nearby) == 1:
             hit.peer = nearby.pop()
 
@@ -210,8 +219,8 @@ def stdio_origin(pipe: str, known_pipes: set[str]) -> tuple[str, str, str] | Non
     return service, source, match.group("pid")
 
 
-def build_clusters(hits: list[PipeHit]) -> list[_Cluster]:
-    """Signature hits grouped per (host, client), split on CLUSTER_GAP."""
+def build_clusters(hits: list[PipeHit], w: PipeWindows = DEFAULT_WINDOWS) -> list[_Cluster]:
+    """Signature hits grouped per (host, client), split on the cluster gap."""
     clusters: list[_Cluster] = []
     open_clusters: dict[tuple[str, str | None], _Cluster] = {}
     for hit in hits:
@@ -220,7 +229,7 @@ def build_clusters(hits: list[PipeHit]) -> list[_Cluster]:
             continue
         key = (hit.computer, hit.peer)
         cluster = open_clusters.get(key)
-        if cluster is None or hit.timestamp - cluster.end > CLUSTER_GAP:
+        if cluster is None or hit.timestamp - cluster.end > w.cluster_gap:
             cluster = _Cluster(hit.computer, hit.peer)
             open_clusters[key] = cluster
             clusters.append(cluster)
@@ -235,7 +244,7 @@ def build_clusters(hits: list[PipeHit]) -> list[_Cluster]:
         partners = [
             c for c in clusters
             if c.client is not None and c.computer == cluster.computer
-            and c.start - CLUSTER_GAP <= cluster.end and cluster.start <= c.end + CLUSTER_GAP
+            and c.start - w.cluster_gap <= cluster.end and cluster.start <= c.end + w.cluster_gap
         ]
         if len(partners) == 1:
             partners[0].absorb(cluster)
@@ -244,7 +253,7 @@ def build_clusters(hits: list[PipeHit]) -> list[_Cluster]:
 
 
 def _credit(clusters: list[_Cluster], installs: list[ServiceInstall],
-            tasks: list[NormalizedEvent], drops: list[NormalizedEvent]) -> None:
+            tasks: list[NormalizedEvent], drops: list[NormalizedEvent], w: PipeWindows) -> None:
     """Attach drops, installs and tasks to the activity that most plausibly
     caused them.
 
@@ -252,7 +261,7 @@ def _credit(clusters: list[_Cluster], installs: list[ServiceInstall],
     (the binary is copied first) or falls inside. An install or task goes to
     the cluster with corroborating context first (a drop by the same client,
     a tool pipe), then to the most recent activity strictly before it, an
-    address-known cluster winning ties; hits up to SKEW *after* it are only
+    address-known cluster winning ties; hits up to the skew *after* it are only
     considered when nothing precedes it. Recency alone would let a poller
     whose tick lands next to the install take credit for an attacker's burst.
     """
@@ -262,7 +271,7 @@ def _credit(clusters: list[_Cluster], installs: list[ServiceInstall],
             c for c in clusters
             if c.computer == drop.computer
             and (c.client is None or c.client == ip)
-            and c.start - DROP_WINDOW <= drop.timestamp <= c.end + SKEW
+            and c.start - w.drop_window <= drop.timestamp <= c.end + w.skew
         ]
         if candidates:
             nearest = min(candidates, key=lambda c: (abs((c.start - drop.timestamp).total_seconds()),
@@ -276,8 +285,8 @@ def _credit(clusters: list[_Cluster], installs: list[ServiceInstall],
                 if cluster.computer != computer:
                     continue
                 before = [h.timestamp for h in cluster.hits
-                          if (h.timestamp < when if strict else h.timestamp <= when + SKEW)]
-                if not before or when - max(before) > FOLLOW_WINDOW:
+                          if (h.timestamp < when if strict else h.timestamp <= when + w.skew)]
+                if not before or when - max(before) > w.follow_window:
                     continue
                 context = bool(cluster.drops) or "tool" in cluster.kinds
                 burst = -(cluster.end - cluster.start).total_seconds()  # a burst beats a poller
@@ -303,27 +312,40 @@ class NamedPipeExecution(Rule):
     severity = "high"
     techniques = ("T1021.002", "T1569.002")
     local_title = "Local execution through a remote-exec tool's pipes"
+    cluster_gap = DEFAULT_WINDOWS.cluster_gap
+    follow_window = DEFAULT_WINDOWS.follow_window
+    drop_window = DEFAULT_WINDOWS.drop_window
+    skew = DEFAULT_WINDOWS.skew
+    enum_window = DEFAULT_WINDOWS.enum_window
+    enum_distinct_pipes = DEFAULT_WINDOWS.enum_distinct_pipes
+    tunables = ("cluster_gap", "follow_window", "drop_window", "skew", "enum_window",
+                "enum_distinct_pipes")
+
+    def windows(self) -> PipeWindows:
+        return PipeWindows(self.cluster_gap, self.follow_window, self.drop_window, self.skew,
+                           self.enum_window, self.enum_distinct_pipes)
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
-        hits = pipe_hits(ctx)
+        w = self.windows()
+        hits = pipe_hits(ctx, w)
         if not hits:
             return
-        clusters = build_clusters(hits)
+        clusters = build_clusters(hits, w)
         drops = [
             e for e in ctx.events_for(SECURITY, 5145)
             if str(e.get("ShareName") or "").upper().endswith(("ADMIN$", "C$"))
             and str(e.get("RelativeTargetName") or "").lower().endswith(EXECUTABLE)
         ]
-        _credit(clusters, credible_installs(ctx), ctx.events_for(SECURITY, 4698, 4702), drops)
+        _credit(clusters, credible_installs(ctx), ctx.events_for(SECURITY, 4698, 4702), drops, w)
         for cluster in sorted(clusters, key=lambda c: (c.start, c.computer)):
-            finding = self._judge(cluster, hits)
+            finding = self._judge(cluster, hits, w)
             if finding is not None:
                 yield finding
 
-    def _judge(self, cluster: _Cluster, all_hits: list[PipeHit]) -> Finding | None:
+    def _judge(self, cluster: _Cluster, all_hits: list[PipeHit], w: PipeWindows) -> Finding | None:
         host = cluster.computer
         corroborated = bool(cluster.installs or cluster.drops or cluster.tasks)
-        if "tool" not in cluster.kinds and not corroborated and _is_enumeration(cluster, all_hits):
+        if "tool" not in cluster.kinds and not corroborated and _is_enumeration(cluster, all_hits, w):
             return None
 
         known_pipes = {h.pipe for h in all_hits if h.computer == host}
@@ -416,9 +438,9 @@ def _driven_remotely(cluster: _Cluster) -> bool:
     return any(h.remote and h.pipe.lower() not in locally_driven for h in cluster.hits)
 
 
-def _is_enumeration(cluster: _Cluster, all_hits: list[PipeHit]) -> bool:
+def _is_enumeration(cluster: _Cluster, all_hits: list[PipeHit], w: PipeWindows) -> bool:
     """Did this cluster's own client sweep many distinct pipes around it?"""
-    lo, hi = cluster.start - ENUM_WINDOW, cluster.end + ENUM_WINDOW
+    lo, hi = cluster.start - w.enum_window, cluster.end + w.enum_window
     users = {h.user for h in cluster.hits if h.user != "-"}
 
     def same_actor(hit: PipeHit) -> bool:
@@ -432,7 +454,7 @@ def _is_enumeration(cluster: _Cluster, all_hits: list[PipeHit]) -> bool:
         h.pipe.lower() for h in all_hits
         if h.computer == cluster.computer and h.remote and lo <= h.timestamp <= hi and same_actor(h)
     }
-    return len(distinct) >= ENUM_DISTINCT_PIPES
+    return len(distinct) >= w.enum_distinct_pipes
 
 
 def _summary(cluster: _Cluster, origin: tuple[str, str, str] | None) -> str:

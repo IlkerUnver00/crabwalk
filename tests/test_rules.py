@@ -251,6 +251,12 @@ def test_kerberoasting_ignores_aes_and_machine_accounts():
     assert by_rule(findings_for(aes, machine), "CW-010") == []
 
 
+def test_kerberoasting_ignores_machine_requesters_in_upn_form():
+    event = ev(4769, TargetUserName="WS01$@CORP.LOCAL", ServiceName="svc_sql",
+               TicketEncryptionType="0x17", Status="0x0")
+    assert by_rule(findings_for(event), "CW-010") == []
+
+
 def test_dcsync_by_non_dc_principal_is_critical():
     event = ev(
         4662, SubjectUserName="Administrator", SubjectDomainName="CORP",

@@ -5,10 +5,11 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from datetime import timedelta
+from typing import Any
 
 from ..catalog import SECURITY
-from ..hosts import HostResolver, remote_ip, remote_name, short_host
-from ..sessions import MovementEdge
+from ..hosts import HostResolver, is_machine_account, remote_ip, remote_name, short_host
+from ..sessions import MovementEdge, display_user
 from .base import Finding, HuntContext, Rule, ServiceInstall
 
 #: Service names dropped by common remote-execution tools.
@@ -64,7 +65,8 @@ class PsExecPattern(Rule):
     title = "Remote logon followed by service install"
     severity = "high"
     techniques = ("T1021.002", "T1543.003")
-    window = timedelta(minutes=10)
+    window = timedelta(minutes=10)  # logon -> install
+    tunables = ("window",)
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         for install in credible_installs(ctx):
@@ -101,7 +103,8 @@ class RdpChain(Rule):
     title = "RDP chain across hosts"
     severity = "high"
     techniques = ("T1021.001",)
-    window = timedelta(hours=6)
+    window = timedelta(hours=6)  # first hop -> second hop
+    tunables = ("window",)
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         rdp = [e for e in ctx.tracking.edges if e.logon_type == 10]
@@ -145,15 +148,21 @@ class PassTheHash(Rule):
     title = "Pass-the-hash indicators"
     severity = "medium"
     techniques = ("T1550.002",)
+    # The seclogo/LT9 signature is precise. Privileged NTLM network logons are
+    # a weaker tell that admin tooling produces all day on real AD; this
+    # switch keeps the signature and drops that half.
+    privileged_ntlm = True
+    tunables = ("privileged_ntlm",)
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         for event in ctx.events_for(SECURITY, 4624):
             logon_type = str(event.get("LogonType") or "")
             process = str(event.get("LogonProcessName") or "").strip().lower()
             package = str(event.get("AuthenticationPackageName") or "").upper()
-            user = str(event.get("TargetUserName") or "")
-            if user.endswith("$") or "ANONYMOUS" in user.upper():
+            account = str(event.get("TargetUserName") or "")
+            if is_machine_account(account) or "ANONYMOUS" in account.upper():
                 continue
+            user = display_user(event.get("TargetDomainName"), account)
 
             if logon_type == "9" and process == "seclogo":
                 outbound = str(event.get("TargetOutboundUserName") or "?")
@@ -168,7 +177,7 @@ class PassTheHash(Rule):
                     ),
                     evidence=[event],
                 )
-            elif logon_type == "3" and package == "NTLM":
+            elif self.privileged_ntlm and logon_type == "3" and package == "NTLM":
                 session = ctx.session_for(event.computer, event.get("TargetLogonId"))
                 if session is not None and session.privileged:
                     yield self.finding(
@@ -225,6 +234,18 @@ class AdminShareExecutable(Rule):
     severity = "high"
     techniques = ("T1021.002", "T1570")
     extensions = (".exe", ".dll", ".bat", ".ps1", ".cmd")
+    tunables = ("extensions",)
+
+    @classmethod
+    def check_tunable(cls, name: str, value: Any) -> Any:
+        if name == "extensions":
+            normalized = []
+            for ext in value:
+                if not re.fullmatch(r"\.?[A-Za-z0-9]+", ext):
+                    raise ValueError(f"{ext!r} is not a file extension (write '.exe' or 'exe', no globs)")
+                normalized.append("." + ext.lstrip(".").lower())
+            return tuple(normalized)
+        return value
 
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]:
         seen: set[tuple[str, str, str, str]] = set()
@@ -233,9 +254,9 @@ class AdminShareExecutable(Rule):
             target = str(event.get("RelativeTargetName") or "")
             if not share.upper().endswith(("ADMIN$", "C$")):
                 continue
-            if not target.lower().endswith(self.extensions):
+            if not target.lower().endswith(tuple(e.lower() for e in self.extensions)):
                 continue
-            user = str(event.get("SubjectUserName") or "-")
+            user = display_user(event.get("SubjectDomainName"), event.get("SubjectUserName"))
             key = (event.computer, share, target.lower(), user)
             if key in seen:
                 continue

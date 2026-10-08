@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 from ..catalog import SECURITY, SERVICE_IMAGE_PATH, SYSMON, SYSTEM
 from ..models import NormalizedEvent
@@ -169,15 +169,26 @@ def _collapse_installs(installs: list[ServiceInstall]) -> list[ServiceInstall]:
 
 
 class Rule(ABC):
-    """A detection rule. Subclasses set the class attributes and evaluate()."""
+    """A detection rule. Subclasses set the class attributes and evaluate().
+
+    ``tunables`` names the instance attributes an analyst may override from a
+    config file (correlation windows, thresholds, switches). Each has a
+    class-level default whose type decides how the configured value is read.
+    """
 
     id: str
     title: str
     severity: str
     techniques: tuple[str, ...]
+    tunables: ClassVar[tuple[str, ...]] = ()
 
     @abstractmethod
     def evaluate(self, ctx: HuntContext) -> Iterator[Finding]: ...
+
+    @classmethod
+    def check_tunable(cls, name: str, value: Any) -> Any:
+        """Validate/normalize a configured tunable; raise ValueError to reject."""
+        return value
 
     def finding(self, **kwargs: Any) -> Finding:
         """Build a Finding pre-filled with this rule's metadata."""

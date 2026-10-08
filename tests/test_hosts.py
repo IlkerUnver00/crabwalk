@@ -55,6 +55,20 @@ def test_short_host(raw, expected):
     assert short_host(raw) == expected
 
 
+@pytest.mark.parametrize("account, machine", [
+    ("CORP\\PC01$", True),
+    ("PC01$@CORP.LOCAL", True),  # Kerberos UPN form
+    ("PC01$", True),
+    ("CORP\\admin", False),
+    ("admin@CORP.LOCAL", False),
+    ("", False),
+])
+def test_is_machine_account(account, machine):
+    from crabwalk.hosts import is_machine_account
+
+    assert is_machine_account(account) is machine
+
+
 def test_classify_ip():
     assert classify_ip("10.0.0.5") == "internal"
     assert classify_ip("8.8.8.8") == "external"

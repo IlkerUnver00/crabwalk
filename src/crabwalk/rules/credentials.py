@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from ..catalog import SECURITY
-from ..hosts import remote_ip
+from ..hosts import is_machine_account, remote_ip
 from ..sessions import display_user
 from .base import Finding, HuntContext, Rule
 
@@ -20,11 +20,6 @@ REPLICATION_GUIDS = (
     "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2",  # DS-Replication-Get-Changes-All
     "89e95b76-444d-4c62-991a-0facbeda640c",  # DS-Replication-Get-Changes-In-Filtered-Set
 )
-
-
-def _strip_domain(account: str) -> str:
-    """'user@CORP.LOCAL' or 'CORP\\user' -> 'user'."""
-    return account.split("@", 1)[0].rsplit("\\", 1)[-1]
 
 
 class Kerberoasting(Rule):
@@ -44,9 +39,9 @@ class Kerberoasting(Rule):
             service = str(event.get("ServiceName") or "")
             user = str(event.get("TargetUserName") or "")
             # Machine accounts ($) and krbtgt requesting/serving are normal.
-            if service.endswith("$") or service.lower() == "krbtgt":
+            if is_machine_account(service) or service.lower() == "krbtgt":
                 continue
-            if _strip_domain(user).endswith("$"):
+            if is_machine_account(user):
                 continue
             yield self.finding(
                 timestamp=event.timestamp,
@@ -78,7 +73,7 @@ class DCSync(Rule):
             subject = str(event.get("SubjectUserName") or "")
             # Domain controllers replicate legitimately; they authenticate as
             # machine accounts ($). Anything else asking to replicate is a DCSync.
-            if subject.endswith("$") or subject.upper() in ("", "ANONYMOUS LOGON"):
+            if is_machine_account(subject) or subject.upper() in ("", "ANONYMOUS LOGON"):
                 continue
             user = display_user(event.get("SubjectDomainName"), subject)
             key = (event.computer, user)

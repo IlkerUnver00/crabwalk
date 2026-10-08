@@ -32,8 +32,11 @@ def render_report(
     findings: list[Finding],
     *,
     stats: Any = None,
+    suppressed: list[tuple[Finding, Any]] | None = None,
     title: str = "crabwalk — Lateral Movement Report",
 ) -> str:
+    """``suppressed`` pairs each allowlisted finding with its allow entry
+    (anything with ``index`` and ``reason``); they are listed, never hidden."""
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
     by_sev = Counter(f.severity for f in findings)
     parts = [
@@ -46,6 +49,7 @@ def render_report(
         _timeline_section(findings),
         _movement_section(ctx),
         _findings_section(findings),
+        _suppressed_section(suppressed or []),
         _FOOT,
     ]
     return "\n".join(parts)
@@ -281,6 +285,25 @@ def _findings_section(findings: list[Finding]) -> str:
     return f"""<section class="card">
   <h2>Findings <span class="muted">({len(findings)})</span></h2>
   {''.join(items)}
+</section>"""
+
+
+def _suppressed_section(suppressed: list[tuple[Finding, Any]]) -> str:
+    if not suppressed:
+        return ""
+    rows = "".join(
+        f"<tr><td class='mono'>{f.timestamp:%Y-%m-%d %H:%M:%S}Z</td>"
+        f"<td class='mono'>{_esc(f.rule_id)}</td><td>{_esc(f.severity)}</td>"
+        f"<td>{_esc(f.host)}</td><td>{_esc(f.user)}</td>"
+        f"<td>allow[{_esc(entry.index)}] {_esc(entry.reason)}</td></tr>"
+        for f, entry in suppressed
+    )
+    return f"""<section class="card">
+  <h2>Suppressed by allowlist <span class="muted">({len(suppressed)})</span></h2>
+  <table>
+    <thead><tr><th>Time</th><th>Rule</th><th>Severity</th><th>Host</th><th>User</th><th>Allowed because</th></tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
 </section>"""
 
 

@@ -6,17 +6,19 @@ import argparse
 import json
 import sys
 from collections import Counter
+from datetime import timedelta
 from pathlib import Path
 
 from . import __version__
 from .attack import technique_name
 from .catalog import describe
+from .config import Config, ConfigError, example_config, format_duration, load_config
 from .graph import build_graph, render_page
 from .models import NormalizedEvent
 from .navigator import build_layer
 from .parser import ParseStats, iter_events
 from .report import render_report
-from .rules import hunt
+from .rules import ALL_RULES, run_rules
 from .rules.base import HuntContext
 
 
@@ -96,7 +98,27 @@ def _build_parser() -> argparse.ArgumentParser:
         help="write the attack-path graph; format by extension: "
              ".html (interactive page), .dot/.gv (Graphviz) or .json",
     )
+    tuning = hunt_cmd.add_argument_group("tuning (override the --config file)")
+    tuning.add_argument("--config", type=Path, metavar="FILE.toml",
+                        help="rule selection, windows and allowlist; see `crabwalk config --example`")
+    tuning.add_argument("--rule", action="append", dest="rules", metavar="ID",
+                        help="run only this rule (repeatable)")
+    tuning.add_argument("--disable", action="append", metavar="ID",
+                        help="do not run this rule (repeatable)")
+    tuning.add_argument("--min-severity", choices=("low", "medium", "high", "critical"),
+                        help="hide findings below this severity")
+    tuning.add_argument("--show-suppressed", action="store_true",
+                        help="also list the findings the allowlist suppressed")
     hunt_cmd.set_defaults(func=_cmd_hunt)
+
+    config_cmd = sub.add_parser(
+        "config",
+        help="check a config file, or print a commented example",
+    )
+    config_cmd.add_argument("file", nargs="?", type=Path, help="config file to validate")
+    config_cmd.add_argument("--example", action="store_true",
+                            help="print an example config listing every setting and its default")
+    config_cmd.set_defaults(func=_cmd_config)
     return parser
 
 
@@ -186,20 +208,38 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
             print(f"error: --graph needs a .html, .dot, .gv or .json file, got {args.graph}",
                   file=sys.stderr)
             return 2
+    try:
+        config = load_config(args.config) if args.config else Config()
+        config = config.with_overrides(only=args.rules, disable=args.disable,
+                                       min_severity=args.min_severity)
+        rules = config.build_rules()
+    except ConfigError as exc:
+        print(f"error: config: {exc}", file=sys.stderr)
+        return 2
     stats = ParseStats()
     try:
-        ctx, findings = hunt(iter_events(args.paths, stats=stats))
+        ctx = HuntContext.build(iter_events(args.paths, stats=stats))
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    screened = config.screen(run_rules(ctx, rules))
+    findings = screened.kept
 
     if args.out:
-        payload = {"findings": [f.to_dict() for f in findings]}
+        payload = {
+            "findings": [f.to_dict() for f in findings],
+            "suppressed": [
+                {**f.to_dict(), "allow_entry": entry.index, "allow_reason": entry.reason}
+                for f, entry in screened.suppressed
+            ],
+            "below_min_severity": screened.below_min_severity,
+            "settings": config.describe(),
+        }
         args.out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     if args.layer:
         args.layer.write_text(json.dumps(build_layer(findings), indent=2), encoding="utf-8")
     if args.report:
-        html = render_report(ctx, findings, stats=stats)
+        html = render_report(ctx, findings, stats=stats, suppressed=screened.suppressed)
         args.report.write_text(html, encoding="utf-8")
     if args.graph:
         graph = build_graph(ctx, findings)
@@ -220,12 +260,27 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         if by_severity[name]
     )
     print(f"findings   : {len(findings)}" + (f"  ({severity_parts})" if findings else ""))
+    ran = config.rule_ids()
+    if len(ran) < len(ALL_RULES):
+        skipped = [cls.id for cls in ALL_RULES if cls.id not in ran]
+        print(f"rules      : {len(ran)} of {len(ALL_RULES)} (not run: {', '.join(skipped)})")
+    if screened.suppressed:
+        hint = "" if args.show_suppressed else "  (--show-suppressed to list)"
+        print(f"suppressed : {len(screened.suppressed)} by allowlist{hint}")
+    if screened.below_min_severity:
+        print(f"hidden     : {screened.below_min_severity} below {config.min_severity} severity")
 
     for f in findings:
         print()
         print(f"[{f.severity.upper()}] {f.timestamp:%Y-%m-%d %H:%M:%S}Z  {f.rule_id}  {f.title}")
         print(f"    host: {f.host}   user: {f.user}   ATT&CK: {', '.join(f.techniques)}")
         print(f"    {f.summary}")
+
+    if args.show_suppressed and screened.suppressed:
+        print("\nSUPPRESSED BY ALLOWLIST")
+        for f, entry in screened.suppressed:
+            print(f"  [{f.severity.upper()}] {f.timestamp:%Y-%m-%d %H:%M:%S}Z  {f.rule_id}  "
+                  f"host: {f.host}  user: {f.user}  -> {entry.label}")
 
     if findings:
         print("\nATT&CK SUMMARY")
@@ -237,8 +292,52 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
     for label, path in outputs:
         if path:
             print(f"wrote {label} -> {path}")
+    for entry in screened.expired:
+        print(f"warning: {entry.label} expired on {entry.expires} and was not applied",
+              file=sys.stderr)
+    for warning in screened.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
     _print_errors(stats)
     return _exit_code(stats)
+
+
+def _cmd_config(args: argparse.Namespace) -> int:
+    if args.example:
+        print(example_config(), end="")
+        return 0
+    if args.file is None:
+        print("error: give a config file to check, or use --example", file=sys.stderr)
+        return 2
+    try:
+        config = load_config(args.file)
+        config.build_rules()
+    except ConfigError as exc:
+        print(f"error: config: {exc}", file=sys.stderr)
+        return 2
+    ran = config.rule_ids()
+    print(f"config     : {args.file}  (valid)")
+    print(f"rules      : {', '.join(ran)}")
+    skipped = [cls.id for cls in ALL_RULES if cls.id not in ran]
+    if skipped:
+        print(f"not run    : {', '.join(skipped)}")
+    print(f"min sev.   : {config.min_severity or 'none'}")
+    for rule_id, values in sorted(config.tunables.items()):
+        cls = next(c for c in ALL_RULES if c.id == rule_id)
+        for name, value in values.items():
+            print(f"setting    : {rule_id}.{name} = {_show(value)}  (default {_show(getattr(cls, name))})")
+    for entry in config.allow:
+        scope = ", ".join(sorted(entry.rules)) if entry.rules is not None else "all rules"
+        expiry = f", expires {entry.expires}" if entry.expires else ""
+        print(f"allow      : [{entry.index}] {entry.reason!r} on {scope}{expiry}")
+    return 0
+
+
+def _show(value: object) -> str:
+    if isinstance(value, timedelta):
+        return format_duration(value)
+    if isinstance(value, tuple):
+        return ", ".join(value)
+    return str(value).lower() if isinstance(value, bool) else str(value)
 
 
 def _print_parse_stats(stats: ParseStats) -> None:

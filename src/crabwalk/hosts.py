@@ -63,6 +63,17 @@ def classify_ip(ip: str) -> str:
     return "external"
 
 
+def account_name(account: object) -> str:
+    """'CORP\\user', 'user@CORP.LOCAL' or 'user' -> 'user'."""
+    return str(account or "").strip().split("@", 1)[0].rsplit("\\", 1)[-1]
+
+
+def is_machine_account(account: object) -> bool:
+    """Computer accounts end in '$' whatever form the log uses
+    ('CORP\\PC01$', 'PC01$@CORP.LOCAL', 'PC01$')."""
+    return account_name(account).endswith("$")
+
+
 def short_host(name: object) -> str | None:
     """'\\\\WIN-1.corp.local$' -> 'win-1'; IPs and placeholders -> None."""
     text = str(name or "").strip().lstrip("\\").rstrip("$").strip().lower()
