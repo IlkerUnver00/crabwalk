@@ -46,11 +46,12 @@ def build(out: Path, base_url: str | None) -> dict[str, int]:
         json.dumps({"findings": [f.to_dict() for f in findings]}, indent=2), encoding="utf-8")
 
     by_severity = Counter(f.severity for f in findings)
+    scored = sum(1 for t in layer["techniques"] if "score" in t)  # parents are layout-only
     (out / "index.html").write_text(
-        _landing(stats, len(findings), by_severity, len(graph.edges), len(layer["techniques"]), base_url),
+        _landing(stats, len(findings), by_severity, len(graph.edges), scored, base_url),
         encoding="utf-8")
     (out / ".nojekyll").write_text("", encoding="utf-8")
-    return {"findings": len(findings), "edges": len(graph.edges), "techniques": len(layer["techniques"])}
+    return {"findings": len(findings), "edges": len(graph.edges), "techniques": scored}
 
 
 def _landing(stats: ParseStats, total: int, by_severity: Counter, edges: int, techniques: int,

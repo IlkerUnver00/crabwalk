@@ -36,10 +36,23 @@ def test_build_layer_scores_techniques():
     _, findings = sample_hunt()
     layer = build_layer(findings)
     assert layer["domain"] == "enterprise-attack"
-    scored = {t["techniqueID"]: t["score"] for t in layer["techniques"]}
+    scored = {t["techniqueID"]: t["score"] for t in layer["techniques"] if "score" in t}
     assert scored["T1070.001"] == 1
     assert scored["T1059.001"] == 1
     assert layer["gradient"]["maxValue"] >= 1
+
+
+def test_build_layer_expands_parents_of_scored_subtechniques():
+    # The Navigator collapses sub-techniques under an uncoloured parent; a layer
+    # of sub-technique scores would look empty unless parents are expanded.
+    _, findings = sample_hunt()
+    layer = build_layer(findings)
+    entries = {t["techniqueID"]: t for t in layer["techniques"]}
+    for parent in ("T1070", "T1059"):
+        assert entries[parent]["showSubtechniques"] is True
+        assert "score" not in entries[parent]  # layout only; the score is aggregated
+    assert layer["layout"]["showAggregateScores"] is True
+    assert layer["layout"]["expandedSubtechniques"] == "annotated"
 
 
 def test_build_layer_empty():
