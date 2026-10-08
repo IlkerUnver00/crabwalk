@@ -38,6 +38,21 @@ crabwalk hunt demo/evtx --report report.html --graph attack-paths.html
 multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`. [`demo/README.md`](demo/README.md)
 explains what each file shows.
 
+## Documentation
+
+- **[Write-up: renamed PsExec, seen only from the target](docs/writeups/01-renamed-psexec-source-host.md)**
+  — a case worked end to end from one 5145 log: recovering the source host from
+  pipe names, the ATT&CK mapping, next steps and what the log cannot prove.
+- **[Detection reference](docs/DETECTIONS.md)** — every rule's data sources,
+  logic, severity, tunables, an allowlist example, false positives, blind spots
+  and the tests that prove it.
+- **[How crabwalk compares](docs/COMPARISON.md)** — Chainsaw, Hayabusa,
+  Zircolite, LogonTracer, DeepBlueCLI, APT-Hunter and EvtxECmd: what each one
+  does, and when to use which.
+- **[Sigma rules](sigma/)** — the per-event parts of CW-012 translated to Sigma
+  for SIEM use, checked with pySigma and against the corpus, with what Sigma
+  cannot express.
+
 ## Why
 
 Every SOC/DFIR team answers the same question after an intrusion: *where did the
@@ -48,7 +63,7 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
 ## Status / Roadmap
 
 - [x] **Step 1** — EVTX parsing into a normalized, time-sorted event stream
-      (curated catalog of ~45 lateral-movement-relevant event IDs across 10 channels)
+      (curated catalog of ~50 lateral-movement-relevant event IDs across 10 channels)
 - [x] **Step 2** — Logon session tracking: LogonId lifecycles per host, inbound
       remote-logon edges (4624/RDP), outbound explicit-credential edges (4648),
       privilege backfill from 4672
@@ -75,6 +90,10 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
 - [x] **Step 11** — Tuning layer (`--config`): rule selection, tunable correlation
       windows, and an allowlist where every suppression carries a reason and can
       expire; suppressed findings stay visible
+- [x] **Step 12** — Live demo: nine bundled recordings, a GitHub Pages site
+      rebuilt on every push (report, attack-path graph, ATT&CK Navigator heatmap)
+- [x] **Step 13** — Documentation: a detection reference, a case write-up, a
+      comparison with other tools, and Sigma translations of the CW-012 signals
 
 ## Quickstart
 
@@ -160,13 +179,27 @@ cluster_gap = "3m"
 
 [[allow]]
 reason = "SCCM client push installs ccmsetup"   # required
-rules = ["CW-001", "CW-012"]                    # optional, default all rules
+rules = ["CW-001", "CW-005", "CW-012"]          # optional, default all rules
 users = ["CORP\\svc_sccm"]                      # globs; a bare name matches any domain
 sources = ["10.0.5.0/24"]                       # client IP/CIDR, or source host glob
 expires = 2026-12-31                            # optional: allowlists rot
-[allow.fields]                                  # regex on the evidence events
+[[allow.fields]]                                # the install (System 7045)
 ServiceName = "^ccmsetup$"
+ImagePath = '^"?C:\\Windows\\ccmsetup\\ccmsetup\.exe"?( |$)'
+[[allow.fields]]                                # the binary copied to ADMIN$ (5145)
+ShareName = '\\ADMIN\$$'
+RelativeTargetName = '^ccmsetup\\ccmsetup\.exe$'
+[[allow.fields]]                                # the SCM pipe, opened on IPC$ (5145)
+ShareName = '\\IPC\$$'
+RelativeTargetName = '^svcctl$'
 ```
+
+Each evidence record of a finding must match one `[[allow.fields]]` table. Pin
+what the record *is* (the service's binary, the share, the pipe), not only names
+an attacker can reuse: a service called `ccmsetup` whose image is a PowerShell
+command line, or the same file dropped over `C$`, stays visible. Names and paths
+cannot tell a trojaned `ccmsetup.exe` from the real one, so keep `users` and
+`sources` narrow too.
 
 - **Generated, never stale.** `crabwalk config --example` prints every rule's
   tunables with their defaults, read from the rules themselves, all commented
@@ -178,16 +211,28 @@ ServiceName = "^ccmsetup$"
   host glob that never matches. A correlation window of zero, which could never
   fire, is refused too. An `[[allow]]` entry needs a reason and at least
   one criterion; silencing a rule outright is what `disable` is for.
-- **Narrow by construction.** A field regex must hold for *every* evidence event
-  that carries the field, so one benign event cannot excuse the rest of a
-  finding. A NetBIOS-qualified user (`CORP\svc`) matches every notation of that
-  domain (`CORP.LOCAL\svc`, `svc@corp.local`). A DNS realm (`svc@corp.contoso.com`)
-  is compared whole, so it never reaches into another forest. A qualified pattern
-  never matches a record that does not show its domain (a bare name, a SID), and
-  a bare name matches any domain. Where a domain's NetBIOS name is not the first
-  label of its DNS name, list both forms. Field names are case-insensitive, and a
-  field name that occurs in none of the evidence it is meant to match is reported
-  as a likely typo.
+- **Narrow by construction.** With `fields`, *every* evidence event of a finding
+  must match one of the entry's tables: carry all of that table's fields, each
+  matching its regex. One benign event cannot excuse the rest of a finding; an
+  entry written for `svcctl` polling cannot excuse the service install that
+  escalated the same finding; and a misspelled or misplaced field makes its
+  table match nothing, so the entry fails closed. Every table must name a field
+  that says what a record is (`ServiceName`, `ImagePath`, `RelativeTargetName`,
+  `PipeName`, `TaskContent`, `CommandLine`, `ScriptBlockText`, ...); who/where
+  fields and per-type constants (`SubjectUserName`, `User`, `IpAddress`,
+  `AccountName`, `ObjectType`) may only narrow it, since `users`, `hosts` and
+  `sources` are for who and where. A table without one, an empty table, or a
+  regex that accepts any value is refused when the file is read. `hunt` warns
+  about near misses: the evidence an entry left out, and a table whose fields no
+  record carries together (a misspelled narrowing field). Field names are
+  case-insensitive. A NetBIOS-qualified user (`CORP\svc`) matches every
+  notation of that domain (`CORP.LOCAL\svc`, `svc@corp.local`). A DNS realm
+  (`svc@corp.contoso.com`) is compared whole against records that show a realm;
+  against a record that shows only a NetBIOS domain (`CORP\svc`) it matches
+  through the realm's first label, and only when written without globs. A
+  qualified pattern never matches a record that does not show its domain (a
+  bare name, a SID), and a bare name matches any domain. Where a domain's
+  NetBIOS name is not the first label of its DNS name, list both forms.
 - **Nothing disappears silently.** Suppressed findings are counted on the
   console (`--show-suppressed` lists them), written to the JSON output with the
   allow entry that matched, and listed in the HTML report. Expired entries are
@@ -222,27 +267,36 @@ ServiceName = "^ccmsetup$"
   not EVTX) or a record that cannot be read is counted and reported, never fatal;
   the run only exits non-zero when nothing at all could be read.
 - **UTC everywhere.** Every timestamp is normalized to UTC at parse time.
-- **Related work:** [Chainsaw](https://github.com/WithSecureLabs/chainsaw) and
-  [Hayabusa](https://github.com/Yamato-Security/hayabusa) run generic Sigma rules
-  over EVTX per-event. crabwalk is narrower and deeper: stateful, cross-host
-  correlation of lateral movement (session chains), not signature matching.
+- **Related work:** [Chainsaw](https://github.com/WithSecureOpenSource/chainsaw) and
+  [Hayabusa](https://github.com/Yamato-Security/hayabusa) run thousands of Sigma
+  rules over EVTX and are the right first pass over unknown evidence;
+  [LogonTracer](https://github.com/JPCERTCC/LogonTracer) graphs accounts to hosts
+  in Neo4j. crabwalk is narrower: stateful, cross-host correlation of lateral
+  movement into a host-to-host path, meant to run alongside a Sigma engine.
+  [COMPARISON.md](docs/COMPARISON.md) has the details and sources.
 
 ## ATT&CK coverage
 
-| Technique | Name | Detection idea |
-|---|---|---|
-| T1021.001 | Remote Desktop Protocol | RDP session chains (4624 LT10, TS-LSM 21/25, RCM 1149) |
-| T1021.002 | SMB / Admin Shares | 5140/5145 on ADMIN$/C$ + service/task creation |
-| T1021.006 | WinRM | WinRM/Operational 91/168 + wsmprovhost lineage |
-| T1047 | WMI | WMI-Activity 5857–5861, wmiprvse child processes |
-| T1053.005 | Scheduled Task | 4698/4702 shortly after a network logon |
-| T1543.003 | Windows Service | 7045/4697/Sysmon 13 shortly after a network logon or SCM pipe access |
-| T1569.002 | Service Execution | remote-exec tool pipes, remote svcctl/ntsvcs access (Sysmon 17/18, 5145 IPC$) |
-| T1550.002 | Pass the Hash | 4624 LT3 + NTLM anomalies, 4776 patterns |
-| T1558.003 | Kerberoasting | 4769 with RC4 (0x17) encryption downgrade |
-| T1003.006 | DCSync | 4662 replication rights by a non-DC principal |
-| T1059.001 | PowerShell | 4103/4104 script blocks (encoded / download cradles) |
-| T1070.001 | Clear Windows Event Logs | Security 1102, System 104 |
+Only the data a rule actually reads is listed. Other cataloged events (4625, 4776,
+5140, RCM 1149, WinRM 168, WMI-Activity 5857–5861, PowerShell 4103, ...) show up in
+`crabwalk parse` but feed no rule yet; [DETECTIONS.md](docs/DETECTIONS.md#scope) has
+the full list.
+
+| Technique | Name | Rules | Data crabwalk reads |
+|---|---|---|---|
+| T1021.001 | Remote Desktop Protocol | CW-002 | RDP chains A→B→C from 4624 LT10 and TS-LSM 21/25 |
+| T1021.002 | SMB / Admin Shares | CW-001, CW-005, CW-012 | remote logon + service install; 5145 on ADMIN$/C$ and IPC$; Sysmon 17/18 |
+| T1021.006 | WinRM | CW-007 | wsmprovhost child processes (Sysmon 1, 4688), WinRM/Operational 91 |
+| T1047 | WMI | CW-006 | WmiPrvSE child processes (Sysmon 1, 4688) |
+| T1053.005 | Scheduled Task | CW-004, CW-012 | 4698/4702 tied to a remote LogonId; remote atsvc access + task |
+| T1543.003 | Windows Service | CW-001, CW-012 | 7045/4697/Sysmon 13 after a remote logon or credited to a pipe cluster |
+| T1569.002 | Service Execution | CW-012 | remote-exec tool pipes, remote svcctl/ntsvcs access (Sysmon 17/18, 5145 IPC$) |
+| T1570 | Lateral Tool Transfer | CW-005, CW-012 | executables reached on ADMIN$/C$ (5145) |
+| T1550.002 | Pass the Hash | CW-003 | 4624 LT9 `seclogo` signature; privileged (4672) NTLM network logons |
+| T1558.003 | Kerberoasting | CW-010 | 4769 with RC4 (0x17) tickets |
+| T1003.006 | DCSync | CW-011 | 4662 replication rights by a non-DC principal |
+| T1059.001 | PowerShell | CW-008 | 4104 script blocks (download cradles, IEX, base64 decode, Mimikatz, AMSI bypass) |
+| T1070.001 | Clear Windows Event Logs | CW-009 | Security 1102, System 104 |
 
 ## Validation
 

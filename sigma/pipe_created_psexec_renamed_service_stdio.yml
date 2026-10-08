@@ -1,0 +1,36 @@
+title: PsExec-Style Stdio Named Pipe With Renamed Service
+id: eb9903b2-9b2f-4c7d-ac69-3270e744d9a0
+status: experimental
+description: |
+    Detects the creation of, or a connection to, a named pipe shaped like the stdio pipes
+    PsExec opens for a remote process: <service>-<client host>-<client pid>-stdin|stdout|stderr.
+    With the default service the pipes start with "PSEXESVC-"; anything else in that position
+    means the service was renamed (psexec -r) or a clone reuses the naming scheme, which is
+    the case the default-pipe rule for "\PSEXESVC" misses. The host segment names the machine
+    the PsExec client ran on. A single event cannot tell whether that client was remote or on
+    this host (see sigma/README.md in the crabwalk repository).
+references:
+    - https://learn.microsoft.com/en-us/sysinternals/downloads/psexec
+    - https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES/blob/4ceed2f4706daf601c212a8f91c113dd85349a2c/Defense%20Evasion/DE_renamed_psexec_service_sysmon_17_18.evtx
+    - https://github.com/IlkerUnver00/crabwalk/blob/4a37de8ce96658d255a4b50be6d692da3a73935d/src/crabwalk/rules/pipes.py
+author: Ilker Unver
+date: 2026-10-08
+tags:
+    - attack.lateral-movement
+    - attack.t1021.002
+    - attack.execution
+    - attack.t1569.002
+logsource:
+    product: windows
+    category: pipe_created
+    definition: 'Requires Sysmon named pipe events (Event ID 17 and 18) to be logged.'
+detection:
+    selection:
+        PipeName|re|i: '^\\[^-\\]+-.+-[0-9]+-std(?:in|out|err)$'
+    filter_main_default_service:
+        PipeName|startswith: '\PSEXESVC-'
+    condition: selection and not filter_main_default_service
+falsepositives:
+    - Administrators or deployment tooling that run PsExec with -r to choose the service name
+    - Other software that names its own pipes <name>-<host>-<number>-stdin|stdout|stderr
+level: high

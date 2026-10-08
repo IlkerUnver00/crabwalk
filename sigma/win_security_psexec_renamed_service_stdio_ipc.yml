@@ -1,0 +1,128 @@
+title: Remote PsExec-Style Stdio Pipe With Renamed Service On IPC$
+id: dfa1e2a9-0322-467c-b9cd-1500214ad399
+name: cw_psexec_renamed_service_stdio_ipc
+related:
+    - id: c462f537-a1e3-41a6-b5fc-b2c2cef9bf82 # SigmaHQ: Suspicious PsExec Execution
+      type: derived
+status: experimental
+description: |
+    Detects a remote client opening a PsExec-style stdio pipe
+    (<service>-<client host>-<client pid>-stdin|stdout|stderr) on IPC$ whose service segment
+    is not the default PSEXESVC, i.e. PsExec run with a renamed service (psexec -r) or a clone
+    that reuses the naming scheme. Derived from SigmaHQ c462f537 with two changes: the whole
+    name must have the stdio shape (a numeric pid segment before the stream, not just a
+    "-stdin" suffix), and loopback clients are excluded so the rule only reports pipe opens
+    that came from another machine. RelativeTargetName carries the client's host name, and
+    IpAddress its address.
+references:
+    - https://learn.microsoft.com/en-us/sysinternals/downloads/psexec
+    - https://github.com/SigmaHQ/sigma/blob/8a4813404ea3074890e0cda9272d4d1a8b2941d6/rules/windows/builtin/security/win_security_susp_psexec.yml
+    - https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES/blob/4ceed2f4706daf601c212a8f91c113dd85349a2c/Lateral%20Movement/LM_renamed_psexecsvc_5145.evtx
+    - https://github.com/IlkerUnver00/crabwalk/blob/4a37de8ce96658d255a4b50be6d692da3a73935d/src/crabwalk/rules/pipes.py
+author: Ilker Unver
+date: 2026-10-08
+tags:
+    - attack.lateral-movement
+    - attack.t1021.002
+    - attack.execution
+    - attack.t1569.002
+logsource:
+    product: windows
+    service: security
+    definition: 'Requires the advanced audit policy "Object Access > Audit Detailed File Share" (Success).'
+detection:
+    selection:
+        EventID: 5145
+        ShareName|endswith: '\IPC$'
+        RelativeTargetName|re|i: '^[^-\\]+-.+-[0-9]+-std(?:in|out|err)$'
+    filter_main_default_service:
+        RelativeTargetName|startswith: 'PSEXESVC-'
+    filter_main_loopback:
+        - IpAddress|startswith:
+              - '127.'
+              - '::ffff:127.'
+        - IpAddress: '::1'
+    condition: selection and not 1 of filter_main_*
+falsepositives:
+    - Administrators or deployment tooling that run PsExec with -r against remote hosts
+    - Other software that names its own pipes <name>-<host>-<number>-stdin|stdout|stderr
+level: high
+---
+title: Executable Written To ADMIN$ Or C$ Over SMB
+id: 760b734a-d59f-4b76-95c8-aa87763e59ec
+name: cw_admin_share_executable_write
+status: experimental
+description: |
+    Building block for the correlation below: a client opens an executable on the ADMIN$ or
+    C$ share with write access. This is how PsExec and its clones copy their service binary
+    to the target before installing it. On its own it is common admin and deployment
+    traffic, so it is meant to be correlated, not alerted on.
+references:
+    - https://github.com/IlkerUnver00/crabwalk/blob/4a37de8ce96658d255a4b50be6d692da3a73935d/src/crabwalk/rules/pipes.py
+author: Ilker Unver
+date: 2026-10-08
+tags:
+    - attack.lateral-movement
+    - attack.t1570
+    - attack.t1021.002
+logsource:
+    product: windows
+    service: security
+    definition: 'Requires the advanced audit policy "Object Access > Audit Detailed File Share" (Success).'
+detection:
+    selection:
+        EventID: 5145
+        ShareName|endswith:
+            - '\ADMIN$'
+            - '\C$'
+        RelativeTargetName|endswith:
+            - '.exe'
+            - '.dll'
+            - '.bat'
+            - '.cmd'
+            - '.ps1'
+            - '.scr'
+        AccessList|contains:
+            - '%%4417'     # WriteData, as stored in the raw event
+            - 'WriteData'  # the same right as rendered by most collectors
+    condition: selection
+falsepositives:
+    - Software deployment, patching and admin scripts that copy binaries to admin shares
+level: low
+---
+title: Admin Share Executable Drop And Renamed PsExec Stdio Pipe From The Same Client
+id: 535e67b3-cbd6-4626-bee9-00a09470d1a1
+status: experimental
+description: |
+    The same client address writes an executable to ADMIN$ or C$ on a host and opens
+    PsExec-style stdio pipes with a non-default service name on that host's IPC$, within five
+    minutes of each other: the copy-and-run pair of a renamed PsExec. The order is not
+    enforced (temporal, not temporal_ordered, because the Splunk backend does not support
+    temporal_ordered). Grouping by Computer and IpAddress keeps two clients working the same
+    host apart. Both events come from Security 5145; Sysmon pipe events carry no client
+    address and cannot be grouped this way.
+references:
+    - https://github.com/IlkerUnver00/crabwalk/blob/4a37de8ce96658d255a4b50be6d692da3a73935d/src/crabwalk/rules/pipes.py
+    - https://github.com/SigmaHQ/sigma-specification/blob/ba9251aa834b11a70dbf80836b453dba99c5159e/specification/sigma-correlation-rules-specification.md
+author: Ilker Unver
+date: 2026-10-08
+tags:
+    - attack.lateral-movement
+    - attack.t1021.002
+    - attack.t1570
+    - attack.execution
+    - attack.t1569.002
+correlation:
+    type: temporal
+    rules:
+        - cw_admin_share_executable_write
+        - cw_psexec_renamed_service_stdio_ipc
+    group-by:
+        - Computer
+        - IpAddress
+    timespan: 5m
+    # pySigma 1.5.1 reads generate here; spec 2.1.0 puts it at the top level.
+    generate: true
+falsepositives:
+    - Administrators deploying a binary and then running it with PsExec -r from the same workstation
+level: critical

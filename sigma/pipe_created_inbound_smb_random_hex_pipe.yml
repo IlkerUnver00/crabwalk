@@ -1,0 +1,33 @@
+title: Inbound SMB Connection To A Random Hex Named Pipe
+id: 6aac4273-fd87-40fc-805f-82585b2fcaca
+status: experimental
+description: |
+    Detects a Sysmon pipe connection (Event ID 18) attributed to the "System" process to a
+    pipe whose whole name is 16 or more hex characters, the shape of named-pipe remote shells
+    and SMB command-and-control channels. A connection made by a remote SMB client is logged
+    with Image "System", but so are clients on the same host that open the pipe over loopback
+    SMB (PsExec targeting its own host, local privilege-escalation tricks). "System" means
+    the open arrived through the SMB server; it does not prove the client was another machine.
+    The EventID 18 restriction is intentional: only connections are wanted, not creations.
+references:
+    - https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES/blob/4ceed2f4706daf601c212a8f91c113dd85349a2c/Lateral%20Movement/lm_sysmon_18_remshell_over_namedpipe.evtx
+    - https://github.com/IlkerUnver00/crabwalk/blob/4a37de8ce96658d255a4b50be6d692da3a73935d/src/crabwalk/rules/pipes.py
+author: Ilker Unver
+date: 2026-10-08
+tags:
+    - attack.lateral-movement
+    - attack.t1021.002
+logsource:
+    product: windows
+    category: pipe_created
+    definition: 'Requires Sysmon named pipe events (Event ID 17 and 18) to be logged.'
+detection:
+    selection:
+        EventID: 18
+        Image: 'System'
+        PipeName|re: '^\\[0-9A-Fa-f]{16,}$'
+    condition: selection
+falsepositives:
+    - Software that serves randomly named hex pipes to remote clients over SMB
+    - Local clients reaching such a pipe over loopback SMB, which Sysmon also attributes to "System"
+level: medium

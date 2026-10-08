@@ -1,0 +1,53 @@
+title: Service ImagePath Set To A Command Interpreter Line
+id: 8b02f8b2-aa7e-4771-b870-18910cfcec34
+related:
+    - id: 4a5f5a5e-ac01-474b-9b4e-d61298c9df1d # SigmaHQ: PowerShell as a Service in Registry
+      type: similar
+    - id: 61a7697c-cb79-42a8-a2ff-5f0cdfae0130 # SigmaHQ: Potential CobaltStrike Service Installations - Registry
+      type: similar
+status: experimental
+description: |
+    Detects a service's ImagePath value being set to a cmd.exe command line rather than a
+    service binary: %COMSPEC% (impacket smbexec writes "%COMSPEC% /Q /c ..."), an explicit
+    "cmd /c|/k|/q" (single space only), or the "\\127.0.0.1\" UNC prefix (other loopback
+    forms such as \\localhost\ are not matched). Services normally point at an
+    executable; a shell one-liner as the image is how several remote-execution tools run a
+    single command through the Service Control Manager. Sysmon logs this registry write even
+    where the System log (7045) was not collected or was cleared. The key must be the
+    ImagePath of a service directly under a control set, not a value further down the tree.
+references:
+    - https://github.com/fortra/impacket/blob/1875828d0f2e987cd89c1bcb45f843708981a199/examples/smbexec.py
+    - https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES/blob/4ceed2f4706daf601c212a8f91c113dd85349a2c/Lateral%20Movement/LM_sysmon_psexec_smb_meterpreter.evtx
+    - https://github.com/IlkerUnver00/crabwalk/blob/4a37de8ce96658d255a4b50be6d692da3a73935d/src/crabwalk/rules/lateral.py
+author: Ilker Unver
+date: 2026-10-08
+tags:
+    - attack.persistence
+    - attack.privilege-escalation
+    - attack.t1543.003
+    - attack.execution
+    - attack.t1569.002
+logsource:
+    product: windows
+    category: registry_set
+detection:
+    selection_key:
+        TargetObject|re|i: '\\(?:CurrentControlSet|ControlSet[0-9]{3})\\Services\\[^\\]+\\ImagePath$'
+    selection_cmdline:
+        Details|contains:
+            - '%COMSPEC%'
+            - 'cmd /c'
+            - 'cmd /k'
+            - 'cmd /q'
+            - 'cmd.exe /c'
+            - 'cmd.exe /k'
+            - 'cmd.exe /q'
+            - 'cmd.exe" /c'
+            - 'cmd.exe" /k'
+            - 'cmd.exe" /q'
+            - '\\\\127.0.0.1\'
+    condition: all of selection_*
+falsepositives:
+    - Third-party services that wrap their binary in a cmd.exe command line
+    - Local privilege escalation (e.g. Meterpreter getsystem) uses the same shape; it is malicious but not lateral movement
+level: high
