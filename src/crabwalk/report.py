@@ -1,8 +1,10 @@
-"""Self-contained HTML report: summary, ATT&CK coverage, timeline, findings.
+"""Self-contained HTML report: summary, attack paths, ATT&CK coverage,
+timeline, findings.
 
-Everything is inlined (CSS + an SVG timeline generated here in Python), so the
-output is a single file an analyst can email or attach to a case. No JS, no
-external assets — it renders the same on an air-gapped DFIR box as anywhere.
+Everything is inlined (CSS + SVG attack graph and timeline generated here in
+Python), so the output is a single file an analyst can email or attach to a
+case. No JS, no external assets — it renders the same on an air-gapped DFIR box
+as anywhere.
 """
 
 from __future__ import annotations
@@ -13,16 +15,9 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .attack import technique_name
+from .graph import build_graph, legend_html, render_svg
 from .rules.base import SEVERITY_RANK, Finding, HuntContext
-
-# Severity -> status palette (status is a *state* encoding, fixed, never themed).
-SEVERITY_COLOR = {
-    "critical": "#d03b3b",
-    "high": "#ec835a",
-    "medium": "#fab219",
-    "low": "#0ca30c",
-}
-SEVERITY_ORDER = ("critical", "high", "medium", "low")
+from .style import SEVERITY_COLOR, SEVERITY_ORDER, page_head
 
 # Findings with a FILETIME-null timestamp land here; excluded from the plot.
 _MIN_PLOT_YEAR = 2000
@@ -46,6 +41,7 @@ def render_report(
         _header(title, generated),
         _stat_row(ctx, findings, stats),
         _severity_bar(by_sev, len(findings)),
+        _graph_section(ctx, findings),
         _attack_section(findings),
         _timeline_section(findings),
         _movement_section(ctx),
@@ -106,6 +102,21 @@ def _severity_bar(by_sev: Counter, total: int) -> str:
   <h2>Severity</h2>
   <div class="sevbar">{''.join(segments)}</div>
   <div class="legend">{''.join(legend)}</div>
+</section>"""
+
+
+def _graph_section(ctx: HuntContext, findings: list[Finding]) -> str:
+    graph = build_graph(ctx, findings)
+    if not graph.edges:
+        return ""
+    origins = sum(n.origin for n in graph.connected)
+    note = f"{len(graph.connected)} hosts &middot; {len(graph.edges)} edges &middot; {origins} origin(s)"
+    if graph.isolated:
+        note += f" &middot; {len(graph.isolated)} more host(s) with findings but no observed movement"
+    return f"""<section class="card">
+  <h2>Attack paths <span class="muted">({note})</span></h2>
+  <div class="scroll">{render_svg(graph, connected_only=True)}</div>
+  {legend_html()}
 </section>"""
 
 
@@ -273,68 +284,6 @@ def _findings_section(findings: list[Finding]) -> str:
 </section>"""
 
 
-_HEAD = """<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__TITLE__</title>
-<style>
-:root{
-  --font: system-ui,-apple-system,"Segoe UI",sans-serif;
-  --page:#f9f9f7; --surface:#fcfcfb; --ink-1:#0b0b0b; --ink-2:#52514e;
-  --ink-3:#898781; --grid:#e1e0d9; --stripe:#f2f1ec; --border:rgba(11,11,11,.10);
-}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --page:#0d0d0d; --surface:#1a1a19; --ink-1:#fff; --ink-2:#c3c2b7;
-  --ink-3:#898781; --grid:#2c2c2a; --stripe:#222220; --border:rgba(255,255,255,.10);
-}}
-:root[data-theme="dark"]{
-  --page:#0d0d0d; --surface:#1a1a19; --ink-1:#fff; --ink-2:#c3c2b7;
-  --ink-3:#898781; --grid:#2c2c2a; --stripe:#222220; --border:rgba(255,255,255,.10);
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--page);color:var(--ink-1);font-family:var(--font);
-  line-height:1.5;padding:24px;max-width:1180px;margin:0 auto}
-h1{font-size:22px;margin:0 0 2px}
-h2{font-size:16px;margin:0 0 14px;font-weight:600}
-.muted{color:var(--ink-3);font-weight:400}
-a{color:#2a78d6;text-decoration:none}a:hover{text-decoration:underline}
-.hero{display:flex;gap:16px;align-items:center;margin-bottom:20px}
-.crab{font-size:40px;line-height:1}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
-  gap:12px;margin-bottom:16px}
-.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;
-  padding:14px 16px}
-.tile-v{font-size:26px;font-weight:650;font-variant-numeric:tabular-nums}
-.tile-k{color:var(--ink-3);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
-  padding:20px;margin-bottom:16px}
-.scroll{overflow-x:auto}
-.sevbar{display:flex;height:16px;border-radius:8px;overflow:hidden;gap:2px;
-  background:var(--stripe)}
-.seg{min-width:3px}
-.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:13px;color:var(--ink-2)}
-.lg{display:inline-flex;align-items:center;gap:6px}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--ink-3);font-weight:600;padding:6px 10px;
-  border-bottom:1px solid var(--border);white-space:nowrap}
-td{padding:6px 10px;border-bottom:1px solid var(--grid);vertical-align:top}
-td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-.mono{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:12px}
-.finding{border-left:3px solid var(--sev);padding:10px 14px;margin:10px 0;
-  background:var(--page);border-radius:0 8px 8px 0}
-.f-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
-.badge{color:#fff;font-size:11px;font-weight:700;padding:1px 7px;border-radius:5px;
-  letter-spacing:.03em}
-.rule{font-family:ui-monospace,monospace;font-size:12px;color:var(--ink-3)}
-.f-title{font-weight:600}
-.f-time{margin-left:auto;color:var(--ink-3)}
-.f-meta{font-size:13px;color:var(--ink-2);margin:6px 0}
-.f-meta b{color:var(--ink-3);font-weight:600}
-.f-sum{font-size:13px;color:var(--ink-1)}
-.chip{display:inline-block;font-family:ui-monospace,monospace;font-size:11px;
-  background:var(--stripe);border:1px solid var(--border);border-radius:5px;
-  padding:0 6px;margin-left:4px}
-</style>
-<div class="viz-root">"""
+_HEAD = page_head("__TITLE__") + '\n<div class="viz-root">'
 
 _FOOT = "</div>"

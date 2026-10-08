@@ -11,6 +11,7 @@ from pathlib import Path
 from . import __version__
 from .attack import technique_name
 from .catalog import describe
+from .graph import build_graph, render_page
 from .models import NormalizedEvent
 from .navigator import build_layer
 from .parser import ParseStats, iter_events
@@ -90,9 +91,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--layer", type=Path, metavar="FILE.json",
         help="write an ATT&CK Navigator layer",
     )
+    hunt_cmd.add_argument(
+        "--graph", type=Path, metavar="FILE",
+        help="write the attack-path graph; format by extension: "
+             ".html (interactive page), .dot/.gv (Graphviz) or .json",
+    )
     hunt_cmd.set_defaults(func=_cmd_hunt)
     return parser
 
+
+GRAPH_FORMATS = {".html": "html", ".htm": "html", ".dot": "dot", ".gv": "dot", ".json": "json"}
 
 
 def _cmd_parse(args: argparse.Namespace) -> int:
@@ -171,6 +179,13 @@ def _cmd_sessions(args: argparse.Namespace) -> int:
 
 
 def _cmd_hunt(args: argparse.Namespace) -> int:
+    graph_format = None
+    if args.graph:
+        graph_format = GRAPH_FORMATS.get(args.graph.suffix.lower())
+        if graph_format is None:
+            print(f"error: --graph needs a .html, .dot, .gv or .json file, got {args.graph}",
+                  file=sys.stderr)
+            return 2
     stats = ParseStats()
     try:
         ctx, findings = hunt(iter_events(args.paths, stats=stats))
@@ -186,6 +201,12 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
     if args.report:
         html = render_report(ctx, findings, stats=stats)
         args.report.write_text(html, encoding="utf-8")
+    if args.graph:
+        graph = build_graph(ctx, findings)
+        text = {"html": render_page, "dot": lambda g: g.to_dot(), "json": lambda g: g.to_json()}[
+            graph_format
+        ](graph)
+        args.graph.write_text(text, encoding="utf-8")
 
     by_severity = Counter(f.severity for f in findings)
     _print_parse_stats(stats)
@@ -211,7 +232,8 @@ def _cmd_hunt(args: argparse.Namespace) -> int:
         technique_counts = Counter(t for f in findings for t in f.techniques)
         for technique_id, count in sorted(technique_counts.items()):
             print(f"{technique_id:<10} {technique_name(technique_id):<60} {count:>4}")
-    outputs = (("findings", args.out), ("layer", args.layer), ("report", args.report))
+    outputs = (("findings", args.out), ("layer", args.layer), ("report", args.report),
+               ("graph", args.graph))
     for label, path in outputs:
         if path:
             print(f"wrote {label} -> {path}")
