@@ -3,6 +3,7 @@
 [![CI](https://github.com/IlkerUnver00/crabwalk/actions/workflows/ci.yml/badge.svg)](https://github.com/IlkerUnver00/crabwalk/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+[![Live demo](https://img.shields.io/badge/live%20demo-report%20%C2%B7%20graph%20%C2%B7%20ATT%26CK-2a78d6)](https://ilkerunver00.github.io/crabwalk/)
 
 **Windows EVTX lateral movement hunter** — parses Windows event logs, correlates
 logon/service/scheduled-task/named-pipe/PowerShell activity across hosts, draws the
@@ -10,11 +11,32 @@ result as an **attack-path graph**, and maps every finding to MITRE ATT&CK.
 
 > Crabs walk sideways. So do attackers.
 
+**[Live demo](https://ilkerunver00.github.io/crabwalk/)** — the report, the
+interactive attack-path graph and an ATT&CK Navigator heatmap, rebuilt from the
+bundled demo logs on every push.
+
 ![crabwalk HTML report](https://raw.githubusercontent.com/IlkerUnver00/crabwalk/main/docs/report-screenshot.png)
 
 *The `crabwalk hunt --report` output over the [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES)
 corpus: the attack paths it reconstructed (who moved where, how, and what fired on
 each host), then severity, ATT&CK coverage, a per-host timeline and ranked findings.*
+
+## Try it in 30 seconds
+
+The repository ships nine small attack recordings in [`demo/`](demo) (GPL-3.0 data
+from EVTX-ATTACK-SAMPLES; the code is MIT), so it finds something right after a clone:
+
+```bash
+git clone https://github.com/IlkerUnver00/crabwalk.git
+cd crabwalk
+pip install -e .
+crabwalk hunt demo/evtx --report report.html --graph attack-paths.html
+```
+
+16 findings, 4 critical. Among them, a renamed PsExec whose source machine
+(`NLLT108334`) is recovered from the target's own share-access log, a DCSync, and a
+multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`. [`demo/README.md`](demo/README.md)
+explains what each file shows.
 
 ## Why
 
