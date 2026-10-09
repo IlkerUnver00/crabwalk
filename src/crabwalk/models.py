@@ -13,7 +13,10 @@ class NormalizedEvent:
     """A single Windows event, flattened into a channel-agnostic shape.
 
     ``data`` holds the merged EventData/UserData payload; System-section
-    metadata lives in the dedicated fields.
+    metadata lives in the dedicated fields. ``record_id`` is the event's
+    System/EventRecordID, the number Event Viewer and other tools show;
+    ``record_number`` is the record's position in this EVTX file, which a
+    filtered or re-exported copy renumbers.
     """
 
     timestamp: datetime
@@ -25,6 +28,7 @@ class NormalizedEvent:
     data: dict[str, Any]
     source_file: str
     user_sid: str | None = None
+    record_number: int | None = None
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.data.get(key, default)
@@ -36,6 +40,7 @@ class NormalizedEvent:
             "provider": self.provider,
             "event_id": self.event_id,
             "record_id": self.record_id,
+            "record_number": self.record_number,
             "computer": self.computer,
             "user_sid": self.user_sid,
             "data": self.data,

@@ -126,7 +126,7 @@ has a rule written for exactly this sample, *Suspicious PsExec Execution*, and b
 ship it. Neither raises it, as shipped. The rule's `ShareName` value escapes a literal `*`
 (`\\\\\*\\IPC$`, meaning the string `\\*\IPC$`). In a copy of the rule whose `ShareName` line
 reads `ShareName|endswith: 'IPC$'`, both engines fire on the same three stdio-pipe records
-(EventRecordID 84050 to 84052, records 20 to 22 in the write-up's numbering). So the miss is
+(EventRecordID 84050 to 84052). So the miss is
 in how the escaped value is matched, not missing coverage. crabwalk reports the run as
 critical and names the source host, NLLT108334 at 10.0.2.16. The
 [write-up](writeups/01-renamed-psexec-source-host.md) works this case end to end.

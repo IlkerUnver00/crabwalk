@@ -251,7 +251,8 @@ class PassTheHash(Rule):
                 key = (event.computer.lower(), account_key(user), source)
                 burst = open_bursts.get(key)
                 if burst and event.timestamp - burst[-1].timestamp <= self.burst_gap:
-                    # one logon kept in two exports (renumbered records) is still one logon
+                    # dedup_events drops exported copies; this is for a copy with no
+                    # EventRecordID, which falls back to its position in its file
                     if not any(_same_logon(event, other) for other in burst):
                         burst.append(event)
                 else:

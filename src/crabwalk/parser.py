@@ -183,7 +183,9 @@ def dedup_events(events: Iterable[NormalizedEvent]) -> list[NormalizedEvent]:
     EventRecordID is monotonic per (host, channel), so ``(computer, channel,
     record_id, timestamp)`` identifies one physical event. Overlapping EVTX
     exports — common in sample corpora and in multi-tool acquisitions — carry
-    the same record twice; without this, correlation rules double-count.
+    the same record twice; without this, correlation rules double-count. The
+    key uses EventRecordID, not the record's number in its file, so copies in
+    differently filtered exports (which renumber records) still collapse.
     """
     seen: set[tuple[str, str, int, Any]] = set()
     out: list[NormalizedEvent] = []
@@ -214,17 +216,28 @@ def parse_record(record: dict[str, Any], *, source_file: str) -> NormalizedEvent
     """Convert one pyevtx-rs JSON record into a NormalizedEvent."""
     event = json.loads(record["data"])["Event"]
     system = event["System"]
+    number = int(record["event_record_id"])  # position in this file
     return NormalizedEvent(
         timestamp=event_timestamp(system, record),
         channel=str(system.get("Channel") or ""),
         provider=str(attributes(system.get("Provider")).get("Name") or ""),
         event_id=int(scalar(system["EventID"])),
-        record_id=int(record["event_record_id"]),
+        record_id=_record_id(system, number),
         computer=str(system.get("Computer") or ""),
         data=flatten_payload(event),
         source_file=source_file,
         user_sid=attributes(system.get("Security")).get("UserID"),
+        record_number=number,
     )
+
+
+def _record_id(system: dict[str, Any], number: int) -> int:
+    """System/EventRecordID: the event's number on the host that logged it,
+    kept by every export. Falls back to the record's number in this file."""
+    try:
+        return int(scalar(system.get("EventRecordID")))
+    except (TypeError, ValueError):
+        return number
 
 
 def event_timestamp(system: dict[str, Any], record: dict[str, Any]) -> datetime:

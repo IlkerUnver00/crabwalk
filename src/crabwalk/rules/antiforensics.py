@@ -35,7 +35,8 @@ class EventLogCleared(Rule):
             key = (event.computer.lower(), account_key(_user(event)))
             burst = open_bursts.get(key)
             if burst and event.timestamp - burst[-1].timestamp <= self.burst_gap:
-                # one clear kept in two exports (renumbered records) is one clear
+                # dedup_events drops exported copies; this is for a copy with no
+                # EventRecordID, which falls back to its position in its file
                 if not any(e.timestamp == event.timestamp and _channel(e) == _channel(event) for e in burst):
                     burst.append(event)
             else:

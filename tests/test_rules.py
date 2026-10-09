@@ -1,3 +1,4 @@
+import dataclasses
 import itertools
 from datetime import datetime, timedelta, timezone
 
@@ -275,9 +276,13 @@ def test_pth_burst_names_a_source_only_when_every_logon_does():
 
 def test_pth_burst_counts_a_logon_kept_in_two_exports_once():
     logon, privileges = _admin_ntlm("0x10", 0)
-    copy = ev(4624, record_id=9999, **logon.data)  # same logon, renumbered by a second export
-    (finding,) = by_rule(findings_for(logon, privileges, copy), "CW-003")
-    assert finding.count == 1 and len(finding.evidence) == 1
+    # a second export keeps the EventRecordID and renumbers the file position: dedup drops it
+    export = dataclasses.replace(logon, record_number=1, source_file="filtered.evtx")
+    # a copy without an EventRecordID falls back to its file position: the burst drops it
+    no_id = ev(4624, record_id=9999, **logon.data)
+    for copy in (export, no_id):
+        (finding,) = by_rule(findings_for(logon, privileges, copy), "CW-003")
+        assert finding.count == 1 and len(finding.evidence) == 1
 
 
 def test_pth_bursts_split_on_gap_source_and_account():

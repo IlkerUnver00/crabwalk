@@ -62,7 +62,9 @@ wrote graph -> attack-paths.html
 ```
 
 The JSON for the CW-012 finding carries `"src_ip": "10.0.2.16"` and
-`"src_host": "NLLT108334"`, and cites records 16, 17, 18, 20, 21 and 22 as evidence.
+`"src_host": "NLLT108334"`, and cites records 84038, 84039, 84044 and 84050 to 84052 as
+evidence. Record numbers here are EventRecordIDs, the numbers Event Viewer and other tools
+show; the JSON also gives each record's position in the file (`record_number`).
 The graph draws it as one edge from the recovered source:
 
 ![Attack-path graph: NLLT108334 (10.0.2.16, origin) to IEWIN7, one critical CW-012 edge](img/01-attack-path-graph.png)
@@ -72,14 +74,18 @@ The graph draws it as one edge from the recovered source:
 The interesting part is the last eight records, all within 0.4 seconds, all from
 `IEWIN7\IEUser` at `10.0.2.16:54765`, logon ID `0x162630`:
 
-| Rec | Share | RelativeTargetName | AccessMask | Meaning |
+| Record | Share | RelativeTargetName | AccessMask | Meaning |
 |---|---|---|---|---|
-| 15 | `ADMIN$` | `\` | `0x100088` | open the share root |
-| 16, 17 | `ADMIN$` | `blabla.exe` | `0x120196` | write access to a binary in `C:\Windows` |
-| 18 | `IPC$` | `svcctl` | `0x12019f` | Service Control Manager RPC pipe, read+write |
-| 19 | `IPC$` | `blabla` | `0x12019f` | the service's own control pipe |
-| 20 | `IPC$` | `blabla-NLLT108334-37048-stdin` | `0x120196` | client writes to the remote process |
-| 21, 22 | `IPC$` | `...-stdout`, `...-stderr` | `0x120089` | client reads its output |
+| 84037 | `ADMIN$` | `\` | `0x100088` | open the share root |
+| 84038, 84039 | `ADMIN$` | `blabla.exe` | `0x120196` | write access to a binary in `C:\Windows` |
+| 84044 | `IPC$` | `svcctl` | `0x12019f` | Service Control Manager RPC pipe, read+write |
+| 84047 | `IPC$` | `blabla` | `0x12019f` | the service's own control pipe |
+| 84050 | `IPC$` | `blabla-NLLT108334-37048-stdin` | `0x120196` | client writes to the remote process |
+| 84051, 84052 | `IPC$` | `...-stdout`, `...-stderr` | `0x120089` | client reads its output |
+
+The record numbers have gaps (84040 to 84043, 84045, 84046, 84048, 84049).
+EventRecordIDs count every event of the channel, so the Security log this file came from
+had other events in between that the export left out: it kept only the 5145 records.
 
 The masks decode with Microsoft's
 [file access rights](https://learn.microsoft.com/en-us/windows/win32/fileio/file-access-rights-constants):
@@ -96,7 +102,7 @@ The domain field `IEWIN7` matters too. For local accounts, Microsoft's 5145 page
 says the field "will contain the name of the computer". The client authenticated
 with IEWIN7's *local* `IEUser` account, not a domain account.
 
-Records 1 to 14 (12:57:09 to 12:57:42) are an earlier session, `0x11d8c8`, from the
+Records 83997 to 84018 (12:57:09 to 12:57:42) are an earlier session, `0x11d8c8`, from the
 same address and account: `winreg`, `srvsvc`, the `ADMIN$` root and `MsFteWds`. Mixed
 in are `srvsvc` opens by the machine account `IEWIN7$` from `10.0.2.15`. None of these
 is a signature pipe, and crabwalk reports nothing for them. I would read that earlier
@@ -110,17 +116,17 @@ classified:
 
 - **tool**: a known tool pipe (`PSEXESVC`, `RemCom`, `PAExec`, ...) or anything
   matching the stdio pattern `<service>-<host>-<pid>-stdin|stdout|stderr`
-  (`STDIO_PIPE`). The three records 20 to 22 land here.
-- **control**: a *remote* open of `svcctl`, `ntsvcs` or `atsvc`. Record 18.
+  (`STDIO_PIPE`). The three records 84050 to 84052 land here.
+- **control**: a *remote* open of `svcctl`, `ntsvcs` or `atsvc`. Record 84044.
 - **random**: a remote open of a long hex-named pipe. Not present here.
 
-`blabla` (record 19) matches none of these, so it is not a signature hit, but its
+`blabla` (record 84047) matches none of these, so it is not a signature hit, but its
 name is remembered for later. Signature hits are clustered per (target host, client
 address); a hit more than 120 seconds after the cluster's last one (`cluster_gap`)
-starts a new cluster. Here that yields one cluster, from 10.0.2.16, holding records 18
-and 20 to 22.
+starts a new cluster. Here that yields one cluster, from 10.0.2.16, holding records 84044
+and 84050 to 84052.
 
-Next, `_credit()` attaches surrounding evidence. Records 16 and 17 are `ADMIN$`
+Next, `_credit()` attaches surrounding evidence. Records 84038 and 84039 are `ADMIN$`
 accesses to a name ending in `.exe`, from the same client, 30 ms before the cluster
 starts, which is inside the 300-second `drop_window`. They become the cluster's
 "drops". A tool pipe plus a drop makes the finding **critical**, and the drop adds
@@ -132,12 +138,12 @@ observed on the same host that prefixes the stdio name (the longest one wins);
 the number as the client's process ID is an inference: the 2019 MENASEC post cited in
 section 5 calls it `<5-random-numbers>`. The corpus supports the pid reading: in the
 section 9 sample the number in the pipe names (8116) equals the `ProcessId` of the
-`PsExec.exe` client that connects to them (Sysmon 18, records 6 to 8). Since the
+`PsExec.exe` client that connects to them (Sysmon 18, records 409650 to 409652). Since the
 service is not `psexesvc`, the summary adds "(renamed)". The finding gets both `src_ip` (from the 5145 records)
 and `src_host` (from the pipe name). That pairing is what lets the graph merge
 `10.0.2.16` and `NLLT108334` into one node.
 
-CW-005 matches the first of those `blabla.exe` records (16) on its own. CW-012
+CW-005 matches the first of those `blabla.exe` records (84038) on its own. CW-012
 already cites it, maps it to T1570, and names the same host, account and address, so
 crabwalk lists CW-005 under this finding ("also matched") instead of reporting
 one event twice. Had the two rules disagreed about who or where, they would
@@ -173,7 +179,7 @@ has little reason to pass `-r`.
 ## 6. One attributed execution versus scattered hits
 
 Sigma rules like the one above are evaluated against one event at a time, so that
-rule would match records 20, 21 and 22 separately: three alerts that each say
+rule would match records 84050, 84051 and 84052 separately: three alerts that each say
 "suspicious PsExec". None of them states the source host. The analyst still has to
 read the pipe name, and then manually connect the `ADMIN$` write and the `svcctl`
 open. Sigma does define correlation rules (`event_count`, `value_count`, `temporal`
@@ -187,7 +193,7 @@ with the rules they ship ([benchmark](../BENCHMARK.md#cases)). Neither raises th
 Hayabusa reports two informational *NetShare File Access* alerts for the `blabla.exe`
 records, and Chainsaw reports nothing. The rule's `ShareName` value escapes a literal `*`.
 In a copy where that one line reads `ShareName|endswith: 'IPC$'`, both engines fire on
-records 20 to 22.
+records 84050 to 84052.
 
 crabwalk's CW-012 produces one finding with the records attached, the source address
 *and* name, and a severity that reflects the corroboration; the CW-005 match on the
@@ -198,7 +204,7 @@ it would go into a ticket:
 2019-01-19 13:00:10Z  NLLT108334 (10.0.2.16) -> IEWIN7 as IEWIN7\IEUser: copied 'blabla.exe' to ADMIN$, then ran it through PsExec with its service renamed to 'blabla'  [critical CW-012]
 ```
 
-"Copied" is earned here: records 16 and 17 ask for `0x120196`, which includes
+"Copied" is earned here: records 84038 and 84039 ask for `0x120196`, which includes
 WriteData. The story says "accessed" for a 5145 without a write bit.
 
 ## 7. ATT&CK mapping
@@ -319,7 +325,10 @@ What this single log cannot prove:
 - **How IEUser's password was obtained**, or whether the 12:57 session was the same
   operator.
 - **Completeness.** If detailed file share auditing was off for part of the period,
-  or the log rolled over, absence of other records means nothing.
+  or the log rolled over, absence of other records means nothing. The gaps in the
+  EventRecordIDs show this file is a filtered export: whatever the host logged between
+  these records (such as the 4624 that opened session `0x162630`, if logon auditing was
+  on) has to come from the original log.
 - **Tool identity.** "PsExec-style" is a naming convention. A clone that copies it
   would look the same.
 

@@ -93,7 +93,10 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   `#attributes` (Provider Name, TimeCreated SystemTime, Security UserID) — NOT `@name`.
   Record-level `timestamp` is often FILETIME-null (1601); event_timestamp() prefers
   System/TimeCreated/@SystemTime. dedup_events() collapses same-record copies across
-  overlapping exports (keyed on computer+channel+record_id+ts).
+  overlapping exports (keyed on computer+channel+record_id+ts). record_id =
+  System/EventRecordID (what Event Viewer shows, kept by every export); record_number = the
+  record's position in its EVTX file (renumbered by filtered re-exports). Cite EventRecordIDs
+  in docs.
 - Design rules: unparsable records are counted, never fatal; minimal dependencies
   (offline DFIR boxes); all timestamps UTC.
 - `samples/` is gitignored — local EVTX test data lives there, and the benchmark's tool

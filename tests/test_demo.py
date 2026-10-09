@@ -38,6 +38,9 @@ def test_renamed_psexec_source_host_is_recovered():
     assert psexec.src_ip == "10.0.2.16"
     # the ADMIN$ drop CW-005 also reports is told inside this finding, not twice
     assert [m.rule_id for m in psexec.merged] == ["CW-005"]
+    # evidence cites the EventRecordIDs other tools show, and where each sits in the file
+    cited = [(e["record_id"], e["record_number"]) for e in psexec.to_dict()["evidence"]]
+    assert cited == [(84038, 16), (84039, 17), (84044, 18), (84050, 20), (84051, 21), (84052, 22)]
     assert not any(f.rule_id == "CW-005" and f.host == "IEWIN7" for f in findings)
 
 

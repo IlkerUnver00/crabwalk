@@ -30,7 +30,7 @@ registry write on a busy host.
 
 - **Unit tests** (`tests/test_rules.py`, `tests/test_pipes.py`, `tests/test_dcom.py`,
   `tests/test_remote_files.py`, `tests/test_config.py`) run each rule on synthetic events.
-  `pytest tests`: 444 passed.
+  `pytest tests`: 447 passed.
 - **Ground-truth corpus** (`tests/test_corpus.py`) runs over
   [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES) (GPL-3.0, not
   vendored, under `samples/EVTX-ATTACK-SAMPLES`). `GROUND_TRUTH` has 22 (file, technique,
@@ -76,6 +76,12 @@ Several rules use the same derived state, built in `sessions.py` and `rules/base
   `\Users\Public\`, or a name or image matching `psexe|paexec|remcom|csexec|winexe`.
 - **Machine accounts** are names that end in `$` in any notation (`CORP\PC01$`,
   `PC01$@CORP.LOCAL`).
+- **Record identity.** A record is identified by its `System/EventRecordID`, the number
+  Event Viewer, Hayabusa and Chainsaw show and every export keeps. The same record loaded
+  twice (overlapping or differently filtered exports, which renumber records) counts once:
+  copies with the same computer, channel, EventRecordID and time collapse. A finding's
+  evidence in the JSON gives both `record_id` (the EventRecordID) and `record_number` (the
+  record's position in its file).
 - **Where a spawned process came from.** WMI, WinRM and DCOM start the requested process in
   the caller's own network logon session. CW-006, CW-007 and CW-013 look up the process's
   session (Sysmon 1 `LogonId`; on a 4688 `TargetLogonId`, else `SubjectLogonId`) and take
@@ -574,7 +580,7 @@ users = ["CORP\\svc_build"]
 
 **False positives.** Administrators clearing logs during maintenance or image builds. This
 shows up on the corpus: besides its two dedicated samples, CW-009 fires on 24 more files. Each
-of those hits is the file's EventRecordID 1, which fits the sample author clearing the log
+of those hits is the first record of its file, which fits the sample author clearing the log
 before each capture. The events are real; they just are not part of the attack.
 
 **Blind spots.** Clearing that leaves no 1102/104 is not detected. That includes stopping the
@@ -795,9 +801,11 @@ legitimate PsExec use is reported as high or critical. Software that names its p
     `LM_Remote_Service01_5145_svcctl.evtx` with the System 7045 in
     `LM_Remote_Service02_7045.evtx`, 47 ms later. Hunted on its own, the svcctl sample gives
     only a MEDIUM svcctl finding, and that is what its `GROUND_TRUTH` entry checks.
-  - "atsvc, then task `\CYAlyNSS`" lists the same 4698 twice, from
-    `LM_ScheduledTask_ATSVC_target_host.evtx` and `Execution/temp_scheduled_task_4698_4699.evtx`.
-    The ATSVC sample is HIGH on its own; the second file only adds a duplicate copy.
+  - "atsvc, then task `\CYAlyNSS`": its 4698 (EventRecordID 566836) is in both
+    `LM_ScheduledTask_ATSVC_target_host.evtx` and `Execution/temp_scheduled_task_4698_4699.evtx`,
+    as record 14 of one file and record 1 of the other. Duplicate records collapse on their
+    EventRecordID, not their place in a file, so the finding cites it once. The ATSVC sample
+    is HIGH on its own.
 
 ## CW-013: Execution through DCOM
 

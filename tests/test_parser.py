@@ -45,6 +45,32 @@ def test_parse_record_maps_system_fields():
     assert event.get("LogonType") == "3"
 
 
+def test_record_id_is_the_event_record_id_not_the_position_in_the_file():
+    # A filtered export renumbers its records; EventRecordID is what Event Viewer shows.
+    record = make_record({"System": dict(SYSTEM, EventRecordID=84050)})
+    record["event_record_id"] = 20
+    event = parse_record(record, source_file="Security.evtx")
+    assert (event.record_id, event.record_number) == (84050, 20)
+    assert json.loads(event.to_json())["record_number"] == 20
+
+
+def test_record_id_falls_back_to_the_position_without_an_event_record_id():
+    system = {k: v for k, v in SYSTEM.items() if k != "EventRecordID"}
+    event = parse_record(make_record({"System": system}), source_file="Security.evtx")
+    assert (event.record_id, event.record_number) == (42, 42)
+
+
+def test_copies_in_differently_filtered_exports_collapse():
+    from crabwalk.parser import dedup_events
+
+    copies = []
+    for position in (14, 1):  # the same 4698 as record 14 of one export, record 1 of another
+        record = make_record({"System": dict(SYSTEM, EventID=4698, EventRecordID=566836)})
+        record["event_record_id"] = position
+        copies.append(parse_record(record, source_file=f"export{position}.evtx"))
+    assert len(dedup_events(copies)) == 1
+
+
 def test_timestamp_falls_back_to_record_when_systemtime_null():
     system = dict(SYSTEM)
     system.pop("TimeCreated")

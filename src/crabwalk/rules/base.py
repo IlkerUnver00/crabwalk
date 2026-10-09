@@ -70,6 +70,7 @@ class Finding:
                     "channel": e.channel,
                     "event_id": e.event_id,
                     "record_id": e.record_id,
+                    "record_number": e.record_number,
                     "computer": e.computer,
                     "source_file": e.source_file,
                 }
