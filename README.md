@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 [![Live demo](https://img.shields.io/badge/live%20demo-report%20%C2%B7%20graph%20%C2%B7%20ATT%26CK-2a78d6)](https://ilkerunver00.github.io/crabwalk/)
+[![Release](https://img.shields.io/github/v/release/IlkerUnver00/crabwalk)](https://github.com/IlkerUnver00/crabwalk/releases/tag/v0.1.0)
 
 **Windows EVTX lateral movement hunter** — parses Windows event logs, correlates
 logon/service/scheduled-task/named-pipe/PowerShell activity across hosts, draws the
@@ -11,6 +12,25 @@ result as an **attack-path graph**, tells it as a dated **attack story**, and ma
 every finding to MITRE ATT&CK.
 
 > Crabs walk sideways. So do attackers.
+
+## Highlights
+
+- **Names the attacker's machine from the target's own logs.** A renamed PsExec, seen only
+  in one host's share-access log, still gives up its source host through its pipe names
+  ([write-up](docs/writeups/01-renamed-psexec-source-host.md)).
+- **Correlation, not a stream of alerts.** One finding per attack step, steps joined across
+  hosts into an attack-path graph and a dated story that states its own caveats. 16 rules,
+  464 tests, each rule documented with its blind spots ([reference](docs/DETECTIONS.md)).
+- **Measured against Hayabusa and Chainsaw, and reported as measured.** The engines flag more
+  files. crabwalk led on lateral-movement alerts on the corpus its rules were written on and
+  fell behind, blind, on one they had never seen; every fix that run prompted is listed
+  ([benchmark](docs/BENCHMARK.md)).
+- **A rule scored blind.** RDP session hijacking (CW-016) was designed on one corpus, frozen,
+  then run on recordings nobody had read: it fired on all 3 and on none of the other 290 files.
+- **Bugs found in both engines.** Neither runs SigmaHQ's *Suspicious PsExec Execution* rule
+  as written; reported as
+  [Yamato-Security/hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932) and
+  [WithSecureOpenSource/chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245).
 
 **[Live demo](https://ilkerunver00.github.io/crabwalk/)** — the attack story, the
 report, the interactive attack-path graph and an ATT&CK Navigator heatmap, rebuilt
@@ -119,6 +139,10 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
 - [x] **Step 17** — RDP session hijacking (CW-016), designed on a third corpus and
       scored blind on the second: 3 of 3 recordings, no other file; evidence cites
       EventRecordIDs, the numbers other tools show
+- [x] **Step 18** — [Release 0.1.0](https://github.com/IlkerUnver00/crabwalk/releases/tag/v0.1.0);
+      the engine bugs the benchmark found reported upstream
+      ([hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932),
+      [chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245))
 
 ## Quickstart
 
