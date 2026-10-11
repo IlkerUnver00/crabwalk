@@ -106,7 +106,8 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   `--reuse OLD.json` keeps the engines' rows and reruns only crabwalk. Second corpus
   (hold-out) = `samples\EVTX-to-MITRE-Attack` (mdecrevoisier, CC0): never design or tune a
   rule on its records; `results-evtx-to-mitre-attack-blind.json` is the run before any change,
-  and BENCHMARK.md lists every change it prompted. Never write the tools' raw alerts to disk: they copy the
+  and BENCHMARK.md lists every change it prompted. Third corpus = `samples\hayabusa-sample-evtx`
+  (only CW-016's dev sample; no licence stated: local use, never vendor it). Never write the tools' raw alerts to disk: they copy the
   samples' malware command lines and Windows Defender flags/quarantines such files —
   parse stdout in memory (the script does). Hayabusa's channel filter skips Sigma rules
   without a Channel: run raw rules with `-A`. Chainsaw rejects `|re|i` (see sigma/README).

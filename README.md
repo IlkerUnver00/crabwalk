@@ -53,9 +53,11 @@ multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`, told as a [story](#the
   crabwalk's rules were written on, the first run had the engines flag more files
   (29 and 27 against 16) and crabwalk flag the most with a lateral-movement alert
   (10 against 8 and 6; 22 and 16 with today's rules, built from those misses),
-  and crabwalk alone alerts on four target-side share logs and one WinRM log. On a second corpus its rules never saw (293 files), the lead is gone:
-  3 of 18 lateral-movement files against 6 and 5. The page lists what that run
-  exposed and what changed because of it.
+  and crabwalk alone alerts on four target-side share logs and one WinRM log.
+  On a second corpus its rules never saw (293 files), the lead is gone: 3 of 18
+  lateral-movement files against 6 and 5 (6 after the fixes it prompted and a
+  rule scored on it blind). The page lists what that run exposed and what
+  changed because of it.
 - **[How crabwalk compares](docs/COMPARISON.md)** — Chainsaw, Hayabusa,
   Zircolite, LogonTracer, DeepBlueCLI, APT-Hunter and EvtxECmd: what each one
   does, and when to use which.
@@ -77,7 +79,7 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
 - [x] **Step 2** — Logon session tracking: LogonId lifecycles per host, inbound
       remote-logon edges (4624/RDP), outbound explicit-credential edges (4648),
       privilege backfill from 4672
-- [x] **Step 3** — Detection rules engine: 15 rules over the session/edge state
+- [x] **Step 3** — Detection rules engine: 16 rules over the session/edge state
       (see table below), findings deduplicated and ranked, every finding tagged
       with ATT&CK technique IDs
 - [x] **Step 4** — ATT&CK Navigator layer export (`--layer`): findings scored
@@ -114,6 +116,9 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
       loopback, bursts of NTLM logons) and rules for the gaps the first benchmark
       showed: DCOM (CW-013), Startup folders written over SMB or RDP (CW-014),
       programs run from `\\tsclient` (CW-015), `winrs` (CW-007)
+- [x] **Step 17** — RDP session hijacking (CW-016), designed on a third corpus and
+      scored blind on the second: 3 of 3 recordings, no other file; evidence cites
+      EventRecordIDs, the numbers other tools show
 
 ## Quickstart
 
@@ -326,7 +331,7 @@ cannot tell a trojaned `ccmsetup.exe` from the real one, so keep `users` and
 
 | Rule | Title | ATT&CK | Notes |
 |---|---|---|---|
-| CW-001 | Remote logon followed by service install | T1021.002, T1543.003 | PsExec pattern; known tool service names → critical |
+| CW-001 | Remote logon followed by service install | T1021.002 (T1021.001 after an RDP logon), T1543.003 | PsExec pattern; known tool service names → critical |
 | CW-002 | RDP chain across hosts | T1021.001 | A→B→C graph walk with hostname/IP correlation |
 | CW-003 | Pass-the-hash indicators | T1550.002 | `seclogo`/LT9 signature; privileged NTLM network logons, one finding per burst |
 | CW-004 | Scheduled task from remote session | T1053.005 | 4698/4702 tied to a remote LogonId |
@@ -341,6 +346,7 @@ cannot tell a trojaned `ccmsetup.exe` from the real one, so keep `users` and
 | CW-013 | Execution through DCOM | T1021.003 | A COM server activated with `-Embedding` (MMC20, LethalHTA's mshta, Office automation): a process it spawns, or the activation itself (mshta always; the others in a remote network logon); the source from the logon session or the one peer that called the COM server |
 | CW-014 | Startup folder written from another host | T1547.001 + T1021.002, T1570 (SMB) / T1021.001 (RDP) | A file landing in a Startup folder written by the SMB server (Sysmon 11 "System", 5145 write) or pushed back through an RDP client's shared drive (mstsc.exe) |
 | CW-015 | Program run from an RDP client's drive | T1021.001, T1570 | A process started from `\\tsclient\` (SharpRDP and co.), source from the RDP logon or connection |
+| CW-016 | RDP session hijacking | T1563.002 (+T1543.003) | `tscon` run as SYSTEM or with a password, or a service built to run it (high); critical when the reconnect of another account's session (4778 / TS-LSM 25) names the victim and the client it was handed to |
 
 ## Design notes
 
@@ -369,7 +375,7 @@ the full list.
 
 | Technique | Name | Rules | Data crabwalk reads |
 |---|---|---|---|
-| T1021.001 | Remote Desktop Protocol | CW-002, CW-014, CW-015 | RDP chains A→B→C from 4624 LT10 and TS-LSM 21/25; files pushed through or run from `\\tsclient` (Sysmon 11, Sysmon 1, 4688) |
+| T1021.001 | Remote Desktop Protocol | CW-001, CW-002, CW-014, CW-015 | a service installed after an RDP logon; RDP chains A→B→C from 4624 LT10 and TS-LSM 21/25; files pushed through or run from `\\tsclient` (Sysmon 11, Sysmon 1, 4688) |
 | T1021.002 | SMB / Admin Shares | CW-001, CW-005, CW-012, CW-014 | remote logon + service install; 5145 on ADMIN$/C$ and IPC$; Sysmon 17/18; Startup-folder writes by the SMB server |
 | T1021.003 | DCOM | CW-013 | COM servers started with `-Embedding` and their children (Sysmon 1, 4688); 4624 / Sysmon 3 for the source |
 | T1021.006 | WinRM | CW-007 | wsmprovhost and winrshost child processes (Sysmon 1, 4688), WinRM/Operational 91 |
@@ -379,6 +385,7 @@ the full list.
 | T1569.002 | Service Execution | CW-012 | remote-exec tool pipes, remote svcctl/ntsvcs access (Sysmon 17/18, 5145 IPC$) |
 | T1570 | Lateral Tool Transfer | CW-005, CW-012, CW-014, CW-015 | executables reached on ADMIN$/C$ (5145); files copied into Startup folders; programs run from `\\tsclient` |
 | T1547.001 | Startup Folder | CW-014 | files created in a Startup folder by another host (Sysmon 11, 5145) |
+| T1563.002 | RDP Hijacking | CW-016 | `tscon` as SYSTEM or with a password (Sysmon 1, 4688, service installs) + the session reconnect (4778, TS-LSM 25) |
 | T1550.002 | Pass the Hash | CW-003 | 4624 LT9 `seclogo` signature; privileged (4672) NTLM network logons |
 | T1558.003 | Kerberoasting | CW-010 | 4769 with RC4 (0x17) tickets |
 | T1003.006 | DCSync | CW-011 | 4662 replication rights by a non-DC principal |

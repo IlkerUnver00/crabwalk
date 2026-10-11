@@ -14,6 +14,7 @@ TECHNIQUES: dict[str, str] = {
     "T1059.001": "Command and Scripting Interpreter: PowerShell",
     "T1070.001": "Indicator Removal: Clear Windows Event Logs",
     "T1570": "Lateral Tool Transfer",
+    "T1563.002": "Remote Service Session Hijacking: RDP Hijacking",
     "T1078": "Valid Accounts",
     "T1558.003": "Steal or Forge Kerberos Tickets: Kerberoasting",
     "T1003.006": "OS Credential Dumping: DCSync",

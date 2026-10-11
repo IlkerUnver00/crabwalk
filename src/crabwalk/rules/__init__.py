@@ -19,6 +19,7 @@ from .lateral import (
     RemoteScheduledTask,
 )
 from .pipes import NamedPipeExecution
+from .rdp import RdpSessionHijack
 from .remote_files import StartupFolderDrop, TsclientExecution
 
 ALL_RULES: tuple[type[Rule], ...] = (
@@ -37,6 +38,7 @@ ALL_RULES: tuple[type[Rule], ...] = (
     DcomExec,
     StartupFolderDrop,
     TsclientExecution,
+    RdpSessionHijack,
 )
 
 

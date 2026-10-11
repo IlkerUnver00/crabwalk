@@ -123,8 +123,11 @@ class PsExecPattern(Rule):
             edge = max(edges, key=lambda e: e.timestamp)  # closest preceding logon
             delta = int((install.timestamp - edge.timestamp).total_seconds())
             known_tool = bool(KNOWN_REMOTE_EXEC_SERVICES.search(f"{install.name} {install.image}"))
+            # an install from an RDP desktop session is not an SMB admin-share hop
+            rdp = edge.logon_type in (7, 10) or edge.kind.startswith("rdp")
             yield self.finding(
                 severity="critical" if known_tool else "high",
+                techniques=("T1021.001" if rdp else "T1021.002", "T1543.003"),
                 timestamp=install.timestamp,
                 host=install.computer,
                 user=edge.user,

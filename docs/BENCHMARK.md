@@ -17,7 +17,7 @@ that alert tagged as lateral movement.
 
 | | Version | Rules | Invocation (per file) |
 |---|---|---|---|
-| crabwalk | 0.1.0 (this repository): commit `9d23709` for the first run, the current one for "now" | 12, now 15 | `crabwalk hunt FILE` |
+| crabwalk | 0.1.0 (this repository): commit `9d23709` for the first run, the current one for "now" | 12, now 16 | `crabwalk hunt FILE` |
 | Hayabusa | 4.1.0, `hayabusa-4.1.0-win-x64.zip` | 4,658 loaded (4,476 Sigma, 182 Hayabusa); noisy, deprecated and unsupported rules off, as shipped | `dfir-timeline -f FILE -w`, JSONL, `verbose` profile |
 | Chainsaw | 2.16.5, `chainsaw_all_platforms+rules.zip` | 3,758 loaded (bundled Sigma + Chainsaw rules) | `hunt FILE -s sigma/ --mapping mappings/sigma-event-logs-all.yml -r rules/`, JSONL |
 
@@ -47,7 +47,7 @@ that alert tagged as lateral movement.
 The first run measured crabwalk at commit `9d23709` (12 rules). The rules added since,
 CW-013 to CW-015 and `winrs` in CW-007, were written from the files this run showed crabwalk
 missing, so the "crabwalk now" column is a score on the data they were built from, not a
-test of them. The [second corpus](#a-second-corpus-the-rules-never-saw) is that test.
+test of them. CW-016, added later from another corpus, does not fire on this one. The [second corpus](#a-second-corpus-the-rules-never-saw) is that test.
 
 | Over the 47 files | crabwalk, first run | crabwalk now | Hayabusa 4.1.0 | Chainsaw 2.16.5 |
 |---|---|---|---|---|
@@ -172,7 +172,7 @@ Single runs varied by up to half: Chainsaw took 18.3 s once. This does not mean 
 faster at the same job:
 
 - crabwalk keeps about 3,000 of the 37,364 records, the event IDs its rules read, and
-  evaluated 12 rules at the time (15 now).
+  evaluated 12 rules at the time (16 now).
 - The other two evaluate thousands of rules over every record.
 
 The point is practical: crabwalk adds about a second to a triage run that already uses one
@@ -265,11 +265,31 @@ An adversarial review of the new code then fixed how the new rules pick their so
 time-bounded host addresses) and a case where a remote PsExec next to a local one could be
 called local. None of those changes moved the numbers on either corpus.
 
-**After the changes** crabwalk flags 5 files of the lateral-movement folder at medium+, 4 of
-them with a lateral alert (one through the CW-013 change this corpus prompted), and 54 of the
-293 files, 17 with a lateral alert, with 69 alerts in all (180 blind). In the attack steps 6
-files carry a lateral alert, since the local PsExec run no longer does. The engines still
-lead on the lateral-movement folder.
+**After the changes** crabwalk flags 7 files of the lateral-movement folder at medium+, 6 of
+them with a lateral alert (one through the CW-013 change this corpus prompted, two through
+CW-016 scored blind below), and 56 of the 293 files, 20 with a lateral alert, with 72 alerts in
+all (180 blind). In the attack steps 6 files carry a lateral alert, since the local PsExec run
+no longer does. On that folder crabwalk now matches Hayabusa's 6 lateral files and passes
+Chainsaw's 5. Hayabusa still flags more files at medium+ (11); Chainsaw flags as many as
+crabwalk (7).
+
+**A rule scored blind: CW-016.** The second corpus's lateral-movement misses included RDP
+session hijacking with `tscon`. CW-016 was written for it the way the corpus should be used:
+designed on a third, independent recording
+([hayabusa-sample-evtx](https://github.com/Yamato-Security/hayabusa-sample-evtx)'s
+`T1563.002_RDP-Hijacking_Security.evtx`) and Microsoft's documentation, reviewed, frozen, and
+only then run on this corpus, whose three RDP-hijack recordings had not been read:
+
+| Recording | CW-016 | Hayabusa (lateral alerts at medium+) | Chainsaw (lateral alerts at medium+) |
+|---|---|---|---|
+| `TA0008-.../ID4688,4778,4779 RDP hijack direct.evtx` | critical: `admmarsid`'s session 2 handed to `JUMP01` (10.23.23.9) | 4 | 2 |
+| `TA0008-.../ID4688-4778 RDP hijack command execution.evtx` | critical: the same, another run | 4 | 2 |
+| `TA0003-.../ID4688-4697 RDP hijack via service creation.evtx` | high: `admmig` created service `hijackservice` to run tscon as LocalSystem; its start, the tscon run and the reconnect are in the command-execution recording above, so these two rows are one hijack | 2 | 2 |
+
+It fired on all three and on none of the other 290 files. One rule and three recordings are
+not a detection rate, but it is the one result on this corpus that was not in sight when the
+rule was written. A review after the scoring changed how a reconnect is paired with a run and
+how a service seen without its run is worded; the results on this corpus did not change.
 
 **Known limitation it showed.** When two rules credit one service install to different
 accounts, merging keeps both findings, since a merge never drops an actor, and the story tells

@@ -191,3 +191,18 @@ def test_corpus_parses_without_errors():
     assert stats.file_errors == stats.damaged_files == 0, f"file problems: {stats.file_problems}"
     assert stats.read_errors == 0, f"{stats.read_errors} unreadable chunks: {stats.errors[:5]}"
     assert stats.skipped == 0, f"{stats.skipped} unparsable records: {stats.errors[:5]}"
+
+
+THIRD = Path(__file__).resolve().parent.parent / "samples" / "hayabusa-sample-evtx"
+
+
+def test_third_corpus_rdp_hijack_sample():
+    """CW-016's development sample (hayabusa-sample-evtx, no licence stated: local only)."""
+    sample = THIRD / "YamatoSecurity" / "LateralMovement" / "T1563.002_RDP-Hijacking_Security.evtx"
+    if not sample.is_file():
+        pytest.skip("hayabusa-sample-evtx sample not present")
+    _, findings = hunt(iter_events([sample]))
+    (finding,) = [f for f in findings if f.rule_id == "CW-016"]
+    assert finding.severity == "critical" and finding.user == "WINDOMAIN\\user"
+    assert (finding.src_ip, finding.src_host) == ("192.168.56.1", "DESKTOP-RKEBDDR")
+    assert "WINDOMAIN\\Administrator's session 2" in finding.action

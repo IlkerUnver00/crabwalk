@@ -23,11 +23,11 @@
   "summary": {
     "crabwalk": {
       "files": 293,
-      "files_with_medium_plus": 54,
-      "files_with_lateral_medium_plus": 17,
-      "files_with_any_alert": 54,
-      "alerts_total": 69,
-      "medium_plus_total": 69,
+      "files_with_medium_plus": 56,
+      "files_with_lateral_medium_plus": 20,
+      "files_with_any_alert": 56,
+      "alerts_total": 72,
+      "medium_plus_total": 72,
       "median_medium_plus_per_detected_file": 1.0,
       "max_medium_plus_in_a_file": 4
     },
@@ -185,10 +185,10 @@
       "crabwalk": {
         "files": 82,
         "files_with_medium_plus": 7,
-        "files_with_lateral_medium_plus": 0,
+        "files_with_lateral_medium_plus": 1,
         "files_with_any_alert": 7,
-        "alerts_total": 8,
-        "medium_plus_total": 8,
+        "alerts_total": 9,
+        "medium_plus_total": 9,
         "median_medium_plus_per_detected_file": 1,
         "max_medium_plus_in_a_file": 2
       },
@@ -344,11 +344,11 @@
     "TA0008-Lateral Movement": {
       "crabwalk": {
         "files": 18,
-        "files_with_medium_plus": 5,
-        "files_with_lateral_medium_plus": 4,
-        "files_with_any_alert": 5,
-        "alerts_total": 6,
-        "medium_plus_total": 6,
+        "files_with_medium_plus": 7,
+        "files_with_lateral_medium_plus": 6,
+        "files_with_any_alert": 7,
+        "alerts_total": 8,
+        "medium_plus_total": 8,
         "median_medium_plus_per_detected_file": 1,
         "max_medium_plus_in_a_file": 2
       },
@@ -4523,19 +4523,28 @@
       "file": "TA0003-Persistence/T1543.003-Create or Modify System Process-Windows Service/ID4688-4697 RDP hijack via service creation.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 1,
+          "alerts": 2,
           "by_level": {
-            "high": 1
+            "high": 2
           },
-          "medium_plus": 1,
-          "lateral_medium_plus": 0,
+          "medium_plus": 2,
+          "lateral_medium_plus": 1,
           "titles_medium_plus": [
             [
               "CW-009 Event log cleared",
               1
+            ],
+            [
+              "CW-016 RDP session hijacking",
+              1
             ]
           ],
-          "titles_lateral_medium_plus": []
+          "titles_lateral_medium_plus": [
+            [
+              "CW-016 RDP session hijacking",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 8,
@@ -12217,12 +12226,24 @@
       "file": "TA0008-Lateral Movement/T1021.001-Remote Desktop Protocol/ID4688,4778,4779 RDP hijack direct.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": [],
-          "titles_lateral_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-016 RDP session hijacking",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-016 RDP session hijacking",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 24,
@@ -12285,12 +12306,24 @@
       "file": "TA0008-Lateral Movement/T1021.001-Remote Desktop Protocol/ID4688-4778 RDP hijack command execution.evtx",
       "tools": {
         "crabwalk": {
-          "alerts": 0,
-          "by_level": {},
-          "medium_plus": 0,
-          "lateral_medium_plus": 0,
-          "titles_medium_plus": [],
-          "titles_lateral_medium_plus": []
+          "alerts": 1,
+          "by_level": {
+            "critical": 1
+          },
+          "medium_plus": 1,
+          "lateral_medium_plus": 1,
+          "titles_medium_plus": [
+            [
+              "CW-016 RDP session hijacking",
+              1
+            ]
+          ],
+          "titles_lateral_medium_plus": [
+            [
+              "CW-016 RDP session hijacking",
+              1
+            ]
+          ]
         },
         "hayabusa": {
           "alerts": 36,

@@ -20,7 +20,7 @@ logons** in a Neo4j database. EvtxECmd and Timeline Explorer **normalise and
 display** events and do not detect anything.
 
 crabwalk answers one question: *where did the attacker log on, and where did they
-go next?* It has 15 hand-written rules, reads Windows EVTX only, and is not a Sigma
+go next?* It has 16 hand-written rules, reads Windows EVTX only, and is not a Sigma
 engine. It is not the only tool that graphs logons: LogonTracer links accounts to
 hosts, and Zircolite correlates across files. What crabwalk adds is a
 **host-to-host graph without a database server**. It keeps logon sessions per host
@@ -106,7 +106,7 @@ Hayabusa implements field aliases is not verified.
 
 | Tool | Rules | Timeline | Cross-event / cross-host correlation | Offline |
 |---|---|---|---|---|
-| crabwalk | 15 Python rules, ATT&CK-tagged; tunable via TOML | time-sorted JSONL; per-host swimlane in report | LogonId sessions per host (4672 backfill); 4624/4648/RDP edges; IP↔name host resolution (not time-scoped); two-hop RDP chains (A→B→C within a tunable 6 h window); PsExec source host from pipe names; one event told once across rules; attack-path graph and dated story | no network code |
+| crabwalk | 16 Python rules, ATT&CK-tagged; tunable via TOML | time-sorted JSONL; per-host swimlane in report | LogonId sessions per host (4672 backfill); 4624/4648/RDP edges; IP↔name host resolution (not time-scoped); two-hop RDP chains (A→B→C within a tunable 6 h window); PsExec source host from pipe names; one event told once across rules; attack-path graph and dated story | no network code |
 | Chainsaw | Sigma (external) + 131 Chainsaw rule files[^cs-rules] | Shimcache/Amcache execution timeline[^cs-readme] | Sigma `count() by` only, no timeframe[^cs-sigma]; v2 correlation not found[^cs-search] | all-in-one release with rules[^cs-readme] |
 | Hayabusa | 4,000+ curated[^hb-docs] | yes, core purpose[^hb-readme] | Sigma v2: 4 types, `group-by`[^hb-corr]; logon counts[^hb-analysis]; sessions/host graph not found in docs | yes; `update-rules` needs network[^hb-readme] |
 | Zircolite | Sigma → SQLite; 4,515 in default set[^zc-rules] | Timesketch template, GUI[^zc] | counts, temporal sequences, chained rules, cross-file[^zc]; host graph not documented | yes; standalone binaries; `-U` rule update needs network[^zc] |
@@ -182,7 +182,7 @@ learned anywhere in the evidence set is mapped to that name everywhere, so DHCP 
 NAT address reuse, or unrelated evidence loaded together, can merge different
 machines or create false edges. When one address was seen with several names, the
 most frequent name wins. RDP chains need logon events from each hop. Coverage is
-the 15 rules and nothing else.
+the 16 rules and nothing else.
 
 ## When to use which
 

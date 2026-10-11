@@ -1,6 +1,6 @@
 # crabwalk detection reference
 
-This reference covers crabwalk's fifteen detection rules: what each one reads, the logic it
+This reference covers crabwalk's sixteen detection rules: what each one reads, the logic it
 runs, how it sets severity, what you can tune, where it is noisy or blind, and which tests
 prove it. It describes the code in the commit that contains this version of the file, and
 every count below was produced there. The sources are `src/crabwalk/rules/*.py`,
@@ -14,8 +14,7 @@ general Sigma engine. Several rules correlate across events, channels or hosts r
 matching single records. Many cataloged IDs feed no rule yet:
 
 - Security: 4625, 4768, 4771, 4776 (failed logons and Kerberos/NTLM authentication, so
-  password spraying and brute force produce no finding), 4699-4701, 4720/4726, 5140 and
-  4778/4779.
+  password spraying and brute force produce no finding), 4699-4701, 4720/4726 and 5140.
 - System 7036/7040, TS-LSM 22/23/24, RCM 1149, RdpCoreTS 131.
 - WinRM 6/168, WMI-Activity 5857-5861, PowerShell 4103, Windows PowerShell 400/403.
 
@@ -29,8 +28,9 @@ registry write on a busy host.
 ## How the rules are validated
 
 - **Unit tests** (`tests/test_rules.py`, `tests/test_pipes.py`, `tests/test_dcom.py`,
-  `tests/test_remote_files.py`, `tests/test_config.py`) run each rule on synthetic events.
-  `pytest tests`: 447 passed.
+  `tests/test_remote_files.py`, `tests/test_rdp.py`, `tests/test_config.py`) run each rule on
+  synthetic events.
+  `pytest tests`: 464 passed.
 - **Ground-truth corpus** (`tests/test_corpus.py`) runs over
   [EVTX-ATTACK-SAMPLES](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES) (GPL-3.0, not
   vendored, under `samples/EVTX-ATTACK-SAMPLES`). `GROUND_TRUTH` has 22 (file, technique,
@@ -38,7 +38,7 @@ registry write on a busy host.
   is the exception; see its section). `NEGATIVE_TRUTH` has 7 files of *other* attacker
   activity on which a rule must stay silent. Each entry is hunted **one file at a time**,
   and a finding merged under another rule's still counts as that rule firing, both ways.
-  `pytest tests/test_corpus.py`: 35 passed.
+  `pytest tests/test_corpus.py`: 36 passed.
 - **Whole-corpus run.** `crabwalk hunt samples/EVTX-ATTACK-SAMPLES` covers 278 files and
   37,364 records (0 unparsable) and yields 76 findings (4 critical, 56 high, 16 medium),
   after two CW-005 matches are merged into the CW-012 findings that cite them.
@@ -161,15 +161,16 @@ snippet below passes `crabwalk config FILE`.
 
 ## CW-001: Remote logon followed by service install
 
-**ATT&CK:** [T1021.002](https://attack.mitre.org/techniques/T1021/002/) Remote Services: SMB/Windows Admin Shares; [T1543.003](https://attack.mitre.org/techniques/T1543/003/) Create or Modify System Process: Windows Service
+**ATT&CK:** [T1021.002](https://attack.mitre.org/techniques/T1021/002/) Remote Services: SMB/Windows Admin Shares, or [T1021.001](https://attack.mitre.org/techniques/T1021/001/) Remote Desktop Protocol when the logon was an RDP session; [T1543.003](https://attack.mitre.org/techniques/T1543/003/) Create or Modify System Process: Windows Service
 
 **Data sources:** Security 4624 (`TargetLogonId`, `LogonType`, `IpAddress`, `WorkstationName`, `TargetUserName`/`TargetDomainName`), TS-LSM 21/25 (`Address`, `User`), and credible service installs (System 7045, Security 4697, Sysmon 13).
 
 **Logic.** For each credible install, the rule looks for inbound movement edges to the same
 `Computer` from 0 to `window` before it, ignoring machine accounts, ANONYMOUS LOGON null
 sessions (SID `S-1-5-7`, so localized names count too) and 4648 edges. If it finds any, it
-reports the install with the closest preceding logon's user and source. The evidence is the
-install record. The logon is described by the finding's user and source, so allowlist it with
+reports the install with the closest preceding logon's user and source. An install after an
+RDP session (logon type 10 or 7, TS-LSM 21/25) is tagged T1021.001 rather than T1021.002: it
+was made from a remote desktop, not over an admin share. The evidence is the install record. The logon is described by the finding's user and source, so allowlist it with
 `users` and `sources`.
 
 **Severity:** high. It becomes **critical** when the service name or image matches
@@ -211,11 +212,11 @@ the default window. `Lateral Movement/LM_Remote_Service02_7045.evtx` installs `r
 39 minutes after the last inbound logon recorded in a separate sample. With `window = "45m"`,
 `crabwalk hunt` over `Lateral Movement` reports `followed 2364s later by install of service
 'remotesvc' (calc.exe)`. That run joins two separately captured samples, so it only
-illustrates the window and does not count as validation. Unit tests: the nine
+illustrates the window and does not count as validation. Unit tests: the ten
 `test_psexec_pattern_*`, `test_*install*` and `test_sysmon_13_*` tests in
 `tests/test_rules.py` cover the critical escalation, merging of cross-log copies, Sysmon 13
-credibility, an install outside the window, and an ANONYMOUS LOGON (English and German names)
-that must not take the blame; `test_an_account_merely_named_anonymous_is_not_exempt` checks
+credibility, an install outside the window, the T1021.001 tag after an RDP logon, and an
+ANONYMOUS LOGON (English and German names) that must not take the blame; `test_an_account_merely_named_anonymous_is_not_exempt` checks
 that the SID decides. `test_window_tunable_changes_what_correlates` is in
 `tests/test_config.py`.
 
@@ -997,13 +998,92 @@ local program handed a `\\tsclient` path. On the full corpus: 1 finding, that fi
 SharpRDP sample (`LM_sysmon_3_12_13_1_SharpRDP.evtx`) types its command into the Run dialog
 and stays silent.
 
+## CW-016: RDP session hijacking
+
+**ATT&CK:** [T1563.002](https://attack.mitre.org/techniques/T1563/002/) Remote Service Session Hijacking: RDP Hijacking; [T1543.003](https://attack.mitre.org/techniques/T1543/003/) Windows Service when a service ran tscon
+
+**Data sources:** Sysmon 1 (`Image`, `OriginalFileName`, `CommandLine`, `LogonId`, `User`) and Security 4688 (`NewProcessName`, `CommandLine`, logon IDs) for tscon; service installs (System 7045, Security 4697, Sysmon 13) whose image runs tscon; Security 4778/4779 (`AccountName`, `AccountDomain`, `SessionName`, `ClientName`, `ClientAddress`) and TerminalServices-LocalSessionManager 25 (`User`, `SessionID`, `Address`) for the reconnect.
+
+**Logic.** `tscon <id> /dest:<session>` attaches session `<id>` to another session. Windows
+asks for the owner's password (`/password`) unless the caller runs as SYSTEM, so SYSTEM on a
+Remote Desktop host can take over any user's session (the `/password` requirement is in
+Microsoft's [tscon reference](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/tscon);
+the SYSTEM bypass is the technique [ATT&CK T1563.002](https://attack.mitre.org/techniques/T1563/002/)
+describes).
+The rule reports:
+
+1. **A tscon run** (by image, or by Sysmon's `OriginalFileName` when renamed) as SYSTEM
+   (logon session `0x3e7`) or with `/password`. Without either, tscon can only move the
+   caller's own session, so that stays quiet. One run seen by both Sysmon 1 and 4688 is one
+   finding. A service built to run tscon (same session and destination, created up to a day
+   before the run) is linked to it and named; its 4697 names who created it, also when a
+   7045 copy of the same install is in the export.
+2. **A tscon service** whose run was not logged (no process creation), reported from the
+   install.
+
+It then looks for the reconnect tscon causes, on the same host within `window` after it: a
+4778 whose `SessionName` is the destination, or a TS-LSM 25 for the session ID. Each reconnect
+is credited to one run (or service) only: the latest one before it that it matches, so an
+earlier attempt that failed does not take it. Without a destination or ID, only a lone reconnect
+counts. A service seen without its run is reported as created to run tscon, and is told as a
+takeover only when a reconnect follows it. The reconnect names the victim (the account whose session moved) and the client it was
+handed to, which becomes the finding's source. A console reconnect (`Unknown`/`LOCAL`) names
+no source.
+
+**Severity:** **critical** whenever a reconnect is matched, unless the 4779 just before it names
+the same account (the session went back to its owner) or the victim is the finding's user (see
+below); those are high and the story says "moved" rather than "took over". A SYSTEM run with no
+service and no 4779 is critical even if the session was its owner's own: the records cannot
+tell. Without a reconnect, high.
+
+**Tunables:** `window = "2m"`.
+
+```toml
+[[allow]]
+reason = "Kiosk hosts: a SYSTEM task moves the kiosk user's session to the console"
+rules = ["CW-016"]
+hosts = ["KIOSK*"]
+users = ["-"]                       # a SYSTEM run with no service names no user
+```
+
+The finding's user is the account that ran tscon with a password, or the account that created
+the tscon service, which only a Security 4697 names. A SYSTEM run with no service, or whose
+service was seen only in a System 7045 or Sysmon 13, has user `-`; the entry above relies on
+that, so it cannot hide a hijack someone started through their own service. Its evidence includes the reconnect (4778 or
+TS-LSM 25), which no `fields` table can describe, so allowlist by `hosts`, `users` and
+`sources`.
+
+**False positives.** Management and kiosk tooling that moves sessions as SYSTEM: a move back to
+the same account is high, not critical. An administrator who knows another user's password and
+takes over their session with `/password` is reported, as the technique is the same.
+
+**Blind spots.** Hijacks that do not run tscon.exe (Mimikatz `ts::remote`, tools that call
+`WTSConnectSession` directly) leave only the reconnect, which an ordinary reconnect also
+leaves, and are not reported. A SYSTEM scheduled task that runs tscon is seen only through its
+process creation. Without process creation logging and without a service, nothing is left
+to read.
+
+**Validation.** Designed on a third corpus,
+[hayabusa-sample-evtx](https://github.com/Yamato-Security/hayabusa-sample-evtx)'s
+`YamatoSecurity/LateralMovement/T1563.002_RDP-Hijacking_Security.evtx` (no licence stated, so
+used locally and not vendored; `test_third_corpus_rdp_hijack_sample` runs it when present).
+There it gives one critical finding: `WINDOMAIN\user` created service `rdphijack2`, which ran
+tscon as SYSTEM, and Administrator's session 2 was reconnected to `DESKTOP-RKEBDDR`
+(192.168.56.1). The first corpus has no tscon run and no RDP reconnect, so it gives nothing to
+validate on and the rule stays silent there. Then the rule was frozen and scored blind on the
+second corpus's three RDP-hijack recordings, whose records had not been read: it fires on all
+three (two critical with the victim and the jump host `JUMP01`, 10.23.23.9; the service variant,
+whose reconnect is in another file, high) and on no other of its 293 files
+([BENCHMARK.md](BENCHMARK.md#a-second-corpus-the-rules-never-saw)). Unit tests: the 15 tests in
+`tests/test_rdp.py`.
+
 ---
 
 ## Summary
 
 | Rule | Technique(s) | Sources | Corpus-validated |
 |---|---|---|---|
-| CW-001 | T1021.002, T1543.003 | Security 4624 / TS-LSM 21,25 + System 7045 / Security 4697 / Sysmon 13 | No (unit tests only) |
+| CW-001 | T1021.002 (T1021.001 after an RDP logon), T1543.003 | Security 4624 / TS-LSM 21,25 + System 7045 / Security 4697 / Sysmon 13 | No (unit tests only) |
 | CW-002 | T1021.001 | Security 4624 LT10, TS-LSM 21,25 (multi-host) | No (unit test only) |
 | CW-003 | T1550.002 | Security 4624, 4672 | Yes |
 | CW-004 | T1053.005 | Security 4698, 4702 + 4624 | Yes |
@@ -1018,3 +1098,4 @@ and stays silent.
 | CW-013 | T1021.003 | Sysmon 1, Security 4688 (+ 4624 / Sysmon 3 for the source) | Yes (2 positive, 1 negative) |
 | CW-014 | T1547.001; + T1021.002, T1570 (SMB) or T1021.001 (RDP) | Sysmon 11 (Startup folders), Security 5145 (+ Sysmon 3) | Yes (2 positive, 2 negative) |
 | CW-015 | T1021.001, T1570 | Sysmon 1, Security 4688 (+ 4624 / Sysmon 3) | Yes (1 positive) |
+| CW-016 | T1563.002 (+T1543.003 via a service) | Sysmon 1, Security 4688, service installs, Security 4778/4779, TS-LSM 25 | Third corpus (1 positive); blind on the second (3 of 3) |

@@ -451,3 +451,10 @@ def test_every_technique_a_rule_can_emit_has_a_name():
     emitted = {t for path in rules_dir.glob("*.py")
                for t in re.findall(r'"(T\d{4}(?:\.\d{3})?)"', path.read_text(encoding="utf-8"))}
     assert emitted and emitted <= set(TECHNIQUES), sorted(emitted - set(TECHNIQUES))
+
+
+def test_service_install_after_an_rdp_logon_is_not_called_an_smb_hop():
+    rdp = remote_logon(LogonType="10", AuthenticationPackageName="Negotiate")
+    install = ev(7045, channel=SYSTEM, minutes=2, ServiceName="updater", ImagePath=r"C:\Windows\Temp\u.exe")
+    (finding,) = by_rule(findings_for(rdp, install), "CW-001")
+    assert finding.techniques == ("T1021.001", "T1543.003")
