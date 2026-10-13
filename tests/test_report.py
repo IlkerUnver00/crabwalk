@@ -64,7 +64,7 @@ def test_build_layer_empty():
 def test_render_report_is_self_contained_html():
     ctx, findings = sample_hunt()
     html = render_report(ctx, findings)
-    assert html.lstrip().startswith("<meta charset")
+    assert html.startswith('<!doctype html>\n<html lang="en">\n<meta charset="utf-8">')  # no quirks mode
     assert "http://" not in html.split("</style>")[0]  # no external assets in CSS
     assert "<svg" in html  # timeline rendered
     assert "T1070.001" in html

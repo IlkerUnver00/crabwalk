@@ -106,6 +106,9 @@ def test_pages_site_builds_with_a_working_navigator_link(tmp_path):
     assert index.index("separate public lab recordings") < index.index("Path 1")  # caveat first
     layer = json.loads((demo / "navigator-layer.json").read_text(encoding="utf-8"))
     assert layer["domain"] == "enterprise-attack" and layer["techniques"]
+    for page in (demo / "index.html", demo / "report.html", demo / "attack-paths.html",
+                 tmp_path / "index.html", tmp_path / "report.html", tmp_path / "attack-paths.html"):
+        assert page.read_text(encoding="utf-8").startswith("<!doctype html>\n<html lang="), page  # no quirks
 
     # the site root: the project page, and redirects from where the demo used to be
     assert (tmp_path / ".nojekyll").exists()

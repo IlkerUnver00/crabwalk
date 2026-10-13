@@ -103,6 +103,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   .beats .b-text{grid-column:1/-1}
 }
 svg.attack-graph{display:block;max-width:none}
+svg.timeline{display:block}  /* inline, it would sit on the baseline with a gap below */
 svg.attack-graph text{font-family:var(--font)}
 .attack-graph .box{fill:var(--surface)}
 .attack-graph .line{fill:none}
@@ -114,8 +115,13 @@ svg.attack-graph text{font-family:var(--font)}
 
 
 def page_head(title_html: str) -> str:
-    """<head> content shared by every HTML page crabwalk writes."""
+    """The start of every page built on PAGE_CSS (--report, --graph .html, the
+    demo landing page): the doctype (without it a browser renders in quirks
+    mode), <html lang> and the <head> content. The page's body follows; HTML
+    lets <head>, <body> and their closing tags be implied."""
     return (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{title_html}</title>\n<style>{PAGE_CSS}</style>"

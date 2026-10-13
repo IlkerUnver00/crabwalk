@@ -12,7 +12,11 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
                              [--graph g.html|g.dot|g.json] [--story story.md]`
 - report.py = self-contained HTML (inline CSS + Python-generated SVG attack graph and
   swimlane timeline, theme-aware, no JS). navigator.py = ATT&CK layer JSON.
-  style.py = shared CSS + severity palette (status palette, fixed, never themed).
+  style.py = shared CSS + severity palette (status palette, fixed, never themed);
+  style.page_head() starts every page built on PAGE_CSS (--report, --graph .html, the demo
+  landing page): doctype + <html lang="en">, so no quirks mode (tables inherit body
+  line-height; inline SVGs need display:block or they leave a baseline gap). The Turkish
+  project page and build_site._redirect write their own doctype; every new page needs one.
 - hosts.py = host identity (clean_ip, short_host, HostResolver: IP<->name collapsing).
   Never split an IP on '.' to get a "short name" — use short_host(), it returns None for IPs.
 - graph.py = attack-path graph: one node per machine (HostResolver key), edges from
@@ -96,9 +100,11 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
 - Visual check of HTML output: render with Edge headless
   (`msedge --headless=new --screenshot=out.png --window-size=1300,1212 file:///...`,
   URL-encode the ü in Masaüstü as %C3%BC) and look at the PNG; docs/report-screenshot.png
-  is the README hero (the demo/evtx report, `--force-dark-mode --window-size=1300,1580`)
-  and docs/writeups/img/01-attack-path-graph.png the write-up's graph (1100,520). Regenerate
-  both when rule wording or the graph changes. From bash, launch Edge via PowerShell
+  is the README hero (`crabwalk hunt demo/evtx --report`, `--force-dark-mode
+  --hide-scrollbars --window-size=1300,1580`) and docs/writeups/img/01-attack-path-graph.png
+  the write-up's graph (`crabwalk hunt demo/evtx/LM_renamed_psexecsvc_5145.evtx --graph`,
+  `--force-dark-mode --hide-scrollbars --window-size=1100,520`). Regenerate both when rule
+  wording, the graph or the page CSS changes. From bash, launch Edge via PowerShell
   Start-Process (the bash call returns before the PNG is written).
 - Parser reality (learned the hard way): pyevtx-rs nests XML attributes under
   `#attributes` (Provider Name, TimeCreated SystemTime, Security UserID) — NOT `@name`.

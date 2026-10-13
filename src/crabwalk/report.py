@@ -187,7 +187,7 @@ def _timeline_svg(findings: list[Finding]) -> str:
         return pad_t + lane_h * hosts.index(host) + lane_h / 2
 
     parts = [
-        f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
+        f'<svg class="timeline" viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
         f'role="img" xmlns="http://www.w3.org/2000/svg" font-family="var(--font)">'
     ]
 
