@@ -3,7 +3,7 @@
 [![CI](https://github.com/IlkerUnver00/crabwalk/actions/workflows/ci.yml/badge.svg)](https://github.com/IlkerUnver00/crabwalk/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
-[![Live demo](https://img.shields.io/badge/live%20demo-report%20%C2%B7%20graph%20%C2%B7%20ATT%26CK-2a78d6)](https://ilkerunver00.github.io/crabwalk/)
+[![Live demo](https://img.shields.io/badge/live%20demo-report%20%C2%B7%20graph%20%C2%B7%20ATT%26CK-2a78d6)](https://ilkerunver00.github.io/crabwalk/demo/)
 [![Release](https://img.shields.io/github/v/release/IlkerUnver00/crabwalk)](https://github.com/IlkerUnver00/crabwalk/releases/tag/v0.1.0)
 
 **Windows EVTX lateral movement hunter** — parses Windows event logs, correlates
@@ -27,14 +27,17 @@ every finding to MITRE ATT&CK.
   ([benchmark](docs/BENCHMARK.md)).
 - **A rule scored blind.** RDP session hijacking (CW-016) was designed on one corpus, frozen,
   then run on recordings nobody had read: it fired on all 3 and on none of the other 290 files.
-- **Bugs found in both engines.** Neither runs SigmaHQ's *Suspicious PsExec Execution* rule
-  as written; reported as
-  [Yamato-Security/hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932) and
+- **Bugs found in both engines.** Neither Hayabusa 4.1.0 nor Chainsaw 2.16.5 runs SigmaHQ's
+  *Suspicious PsExec Execution* rule as written; reported as
+  [Yamato-Security/hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932)
+  (fixed in Hayabusa 4.2.0) and
   [WithSecureOpenSource/chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245).
 
-**[Live demo](https://ilkerunver00.github.io/crabwalk/)** — the attack story, the
+**[Live demo](https://ilkerunver00.github.io/crabwalk/demo/)** — the attack story, the
 report, the interactive attack-path graph and an ATT&CK Navigator heatmap, rebuilt
-from the bundled demo logs on every push.
+from the bundled demo logs on every push. The
+[project page](https://ilkerunver00.github.io/crabwalk/) (in Turkish) gives the
+design, the pipeline, the rules and the benchmark on one page.
 
 ![crabwalk HTML report](https://raw.githubusercontent.com/IlkerUnver00/crabwalk/main/docs/report-screenshot.png)
 
@@ -143,6 +146,9 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
       the engine bugs the benchmark found reported upstream
       ([hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932),
       [chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245))
+- [x] **Step 19** — [Project page](https://ilkerunver00.github.io/crabwalk/) (in Turkish)
+      at the site root, built from `scripts/project_page.html` with the demo's numbers
+      filled in; the live demo moved to [`/demo/`](https://ilkerunver00.github.io/crabwalk/demo/)
 
 ## Quickstart
 
@@ -206,7 +212,7 @@ findings; so does a smaller finding that knows a source name the larger one lack
 After the findings, `hunt` tells what happened, in order: one path per connected
 group of hosts, one dated line per step from host to host or per burst of findings
 on a host, as whom, from where. The same story leads the HTML report and the
-[live demo](https://ilkerunver00.github.io/crabwalk/); `--story FILE.md` writes it
+[live demo](https://ilkerunver00.github.io/crabwalk/demo/); `--story FILE.md` writes it
 as Markdown for a ticket or case file, and `--out` adds it to the JSON. From the
 demo logs:
 

@@ -15,8 +15,9 @@ sessions   : 13 | edges: 12
 findings   : 13  (critical 4, high 6, medium 3)
 ```
 
-The same output, led by the attack story, is published as a live report on the
-project's GitHub Pages site, rebuilt from this folder on every push.
+The same output, led by the attack story, is published as a
+[live report](https://ilkerunver00.github.io/crabwalk/demo/) on the project's GitHub Pages site, rebuilt from this folder
+on every push.
 
 ## Where the files come from — and their licence
 

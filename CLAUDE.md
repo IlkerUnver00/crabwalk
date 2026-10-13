@@ -27,7 +27,7 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   finding's `merged` (shown as "also matched", full in JSON). A merge must never drop an
   actor, source or time. Allowlist entries must match merged children too.
 - narrative.py = the attack story (hunt prints it; --story md; report "What happened";
-  Pages landing). Every line = one edge visit or one rule burst on a host; sources as the
+  Pages demo page). Every line = one edge visit or one rule burst on a host; sources as the
   step's own records name them; accounts joined by SID except local ones (cloned images
   share local SIDs); gaps > 7 days get a caution before the steps; to_text uses ASCII
   arrows. Changing a rule's wording changes quoted output in README/docs/writeups.
@@ -74,6 +74,17 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   docs/writeups/ (case write-ups on demo/evtx data), docs/COMPARISON.md (sourced claims
   about other tools), sigma/ (pySigma-validated, not loaded by crabwalk). demo/ = nine
   GPL-3.0 corpus files; tests/test_demo.py pins their results and always runs in CI.
+- Pages site (scripts/build_site.py, .github/workflows/pages.yml): the root is the Turkish
+  project page, scripts/project_page.html, whose {{name}} fields build_site fills in: the
+  demo run's counts and severity bar, the Navigator card and link, the rule count
+  (len(ALL_RULES)) and the version (__version__); the demo lives under /demo/
+  (root report.html/attack-paths.html redirect there; a root copy of navigator-layer.json
+  keeps pre-move Navigator links working). Everything else on the page is static, like
+  DETECTIONS.md's counts: test counts (464, 428 in CI, 36 corpus), benchmark tables and
+  highlights, CW-016 3/3, 571 files, module count, "10 kanalda 54 olay ID'si", the 22/7
+  ground-truth entries, per-rule corpus counts and the 13-of-16 corpus-validated rules, the
+  demo path hosts and 10.0.2.16. Update them when those change. Uppercase-styled labels on a
+  lang="tr" page turn i into İ, so English words there need lang="en".
 - Machine accounts: always `hosts.is_machine_account()` (handles `DOM\PC$`,
   `PC$@REALM`); never `endswith("$")` inline.
 - Test data: `samples\EVTX-ATTACK-SAMPLES` (sbousseaden repo, shallow clone, gitignored);

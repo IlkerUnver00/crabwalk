@@ -95,16 +95,39 @@ def test_pages_site_builds_with_a_working_navigator_link(tmp_path):
     spec.loader.exec_module(build_site)
 
     build_site.build(tmp_path, "https://example.github.io/crabwalk/")
-    names = {p.name for p in tmp_path.iterdir()}
+    demo = tmp_path / "demo"
     assert {"index.html", "report.html", "attack-paths.html", "findings.json", "story.md",
-            "navigator-layer.json", ".nojekyll"} <= names
-    index = (tmp_path / "index.html").read_text(encoding="utf-8")
-    assert ("attack-navigator/#layerURL=https%3A%2F%2Fexample.github.io%2Fcrabwalk%2Fnavigator-layer.json"
-            in index)
+            "navigator-layer.json"} <= {p.name for p in demo.iterdir()}
+    navigator = ("attack-navigator/#layerURL="
+                 "https%3A%2F%2Fexample.github.io%2Fcrabwalk%2Fdemo%2Fnavigator-layer.json")
+    index = (demo / "index.html").read_text(encoding="utf-8")
+    assert navigator in index and 'href="../index.html"' in index  # files, so it works from disk too
     assert "What happened" in index and "service renamed to" in index
     assert index.index("separate public lab recordings") < index.index("Path 1")  # caveat first
-    layer = json.loads((tmp_path / "navigator-layer.json").read_text(encoding="utf-8"))
+    layer = json.loads((demo / "navigator-layer.json").read_text(encoding="utf-8"))
     assert layer["domain"] == "enterprise-attack" and layer["techniques"]
+
+    # the site root: the project page, and redirects from where the demo used to be
+    assert (tmp_path / ".nojekyll").exists()
+    page = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert "{{" not in page and 'lang="tr"' in page
+    assert navigator in page and 'href="demo/index.html"' in page
+    assert "13 bulgu" in page and "CRITICAL&nbsp;4" in page  # filled in from the demo run
+    from crabwalk.rules import ALL_RULES
+    for rule in ALL_RULES:  # every rule has a row listing at least its default techniques
+        row = page[page.index(f'<td class="id">{rule.id}</td>'):]
+        row = row[:row.index("</tr>")]
+        assert all(t in row for t in rule.techniques), rule.id
+    for name in ("report.html", "attack-paths.html"):
+        assert f'url=demo/{name}"' in (tmp_path / name).read_text(encoding="utf-8")
+    # Navigator links made before the demo moved fetch the layer from the root
+    assert (tmp_path / "navigator-layer.json").read_text(encoding="utf-8") == json.dumps(layer, indent=2)
+
+    # a local build has no public URL for the Navigator: both pages link the layer file instead
+    build_site.build(tmp_path / "local", None)
+    page = (tmp_path / "local" / "index.html").read_text(encoding="utf-8")
+    assert 'href="demo/navigator-layer.json"' in page and "Navigator katmanı (JSON)" in page
+    assert "attack-navigator" not in page
 
 
 def test_quickstart_command_from_the_readme(tmp_path, capsys):

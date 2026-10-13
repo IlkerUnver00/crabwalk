@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>crabwalk · proje</title>
+<meta name="description" content="crabwalk: Windows EVTX kayıtlarında yanal hareketi makineler arasında ilişkilendiren, saldırı yolu grafiği ve tarihli bir saldırı hikâyesi çıkaran çevrimdışı DFIR aracı.">
+<!-- Template: scripts/build_site.py fills the double-brace fields from the demo run. -->
+<style>
+:root{
+  --ground:#f4f2ec; --surface:#fbfaf7; --surface-2:#ece9e0; --inset:#e7e3d8;
+  --ink:#191e25; --muted:#5b6572; --faint:#67624f; --hair:#dcd7ca;
+  --accent:#2c6d9e; --accent-2:#1f5177; --accent-soft:rgba(44,109,158,.10); --on-accent:#fff;
+  --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0d1218; --surface:#141b22; --surface-2:#1a222b; --inset:#0f171e;
+  --ink:#e7ebf0; --muted:#8b95a1; --faint:#808a96; --hair:#28313c;
+  --accent:#5aa0d6; --accent-2:#84bce8; --accent-soft:rgba(90,160,214,.13); --on-accent:#0d1218;
+}}
+:root[data-theme="dark"]{
+  --ground:#0d1218; --surface:#141b22; --surface-2:#1a222b; --inset:#0f171e;
+  --ink:#e7ebf0; --muted:#8b95a1; --faint:#808a96; --hair:#28313c;
+  --accent:#5aa0d6; --accent-2:#84bce8; --accent-soft:rgba(90,160,214,.13); --on-accent:#0d1218;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; color:var(--ink);
+  background:radial-gradient(120% 90% at 88% -10%, var(--accent-soft), transparent 60%) top / 100% 760px no-repeat,
+    var(--ground);
+  font-family:var(--sans); font-size:17px; line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+p a{text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px}
+.mono{font-family:var(--mono)}
+.eyebrow{
+  font-family:var(--mono); font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); font-weight:600;
+}
+h1,h2,h3{text-wrap:balance; line-height:1.15; font-weight:680}
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:3px}
+code{font-family:var(--mono); font-size:.86em; background:var(--inset);
+  padding:1px 6px; border-radius:5px; color:var(--ink); overflow-wrap:anywhere}
+.mono,code,pre{font-variant-ligatures:none}  /* Cascadia Code would join -< and >- */
+
+/* ---- top bar and hero (the accent glow is on body) ---- */
+.top{display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; padding-top:22px; padding-bottom:22px}
+.mark{width:30px; height:30px; flex:none; color:var(--accent)}
+.wordmark{font-family:var(--mono); font-weight:600; font-size:19px; letter-spacing:.01em}
+.wordmark b{color:var(--accent); font-weight:600}
+.nav{margin-left:auto; display:flex; gap:18px; font-size:14.5px; font-weight:560}
+.hero{padding-top:34px; padding-bottom:44px}  /* keep .wrap's side padding */
+.hero h1{font-size:clamp(2.1rem,5.4vw,3.5rem); margin:.5rem 0 0; letter-spacing:-.02em}
+.hero .lede{max-width:62ch; color:var(--muted); font-size:clamp(1.05rem,2vw,1.22rem); margin:1rem 0 0}
+.hero .lede b{color:var(--ink)}
+.hero .warn{font-family:var(--mono); font-size:12.5px; color:var(--faint); margin-top:14px}
+
+/* calls to action */
+.cta{display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-top:28px}
+.btn{display:inline-flex; align-items:center; gap:10px; padding:12px 20px; border-radius:10px;
+  font-weight:600; font-size:15.5px; border:1px solid var(--hair); background:var(--surface);
+  color:var(--ink); transition:border-color .18s ease, background .18s ease}
+.btn:hover{text-decoration:none; border-color:var(--accent)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--on-accent);
+  font-size:18px; padding:16px 30px}
+.btn.primary:hover{background:var(--accent-2); border-color:var(--accent-2)}
+.btn .sub{font-weight:400; font-size:13px; opacity:.85}
+
+/* severity of the demo findings: crabwalk's fixed status palette, never themed */
+.spectrum{margin-top:30px}
+.spectrum .cap{font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:8px}
+.bar{display:flex; height:34px; border-radius:8px; overflow:hidden; border:1px solid var(--hair)}
+.bar>div{display:flex; align-items:center; justify-content:center; min-width:0; white-space:nowrap;
+  overflow:hidden; font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.02em}
+.ticks{display:flex; flex-wrap:wrap; gap:4px 16px; font-family:var(--mono); font-size:11.5px; color:var(--muted);
+  justify-content:space-between; margin-top:6px; font-variant-numeric:tabular-nums}
+
+/* stat strip */
+.stats{display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+  background:var(--hair); border:1px solid var(--hair); border-radius:12px; overflow:hidden; margin-top:30px}
+.stat{background:var(--surface); padding:18px 16px}
+.stat .n{font-family:var(--mono); font-size:clamp(1.4rem,3.2vw,2rem); font-weight:600;
+  color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+.stat .l{font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.45}
+
+/* ---- sections ---- */
+section{padding:52px 0; border-top:1px solid var(--hair)}
+section>.wrap>.eyebrow{display:block; margin-bottom:10px}
+h2{font-size:clamp(1.5rem,3vw,2rem); margin:0 0 6px; letter-spacing:-.01em}
+.sec-intro{color:var(--muted); max-width:66ch; margin:0 0 30px}
+.note{color:var(--muted); font-size:14.5px; max-width:74ch; margin:18px 0 0}
+
+/* cards */
+.grid2{display:grid; grid-template-columns:repeat(2,1fr); gap:16px}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+.card{background:var(--surface); border:1px solid var(--hair); border-radius:12px; padding:20px 22px;
+  transition:border-color .18s ease}
+.card:hover{border-color:var(--accent)}
+.card h3{font-size:1.02rem; margin:0 0 6px}
+.card p{margin:0; color:var(--muted); font-size:14.5px; line-height:1.55}
+.card .k{font-family:var(--mono); font-size:11px; color:var(--accent); letter-spacing:.1em;
+  text-transform:uppercase; display:block; margin-bottom:9px}
+a.card{display:block; color:inherit}
+a.card:hover{text-decoration:none}
+a.card h3{color:var(--accent)}
+a.card h3 .go{color:var(--muted); font-weight:400}
+.wide{grid-column:1/-1}
+
+/* demo attack path */
+.path{display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; margin:0 0 26px}
+.host{font-family:var(--mono); font-size:14px; font-weight:600; padding:6px 12px; border-radius:8px;
+  background:var(--surface); border:1px solid var(--hair)}
+.host.first{border-color:var(--accent); color:var(--accent)}
+.arr{font-family:var(--mono); color:var(--faint)}
+.path .also{font-family:var(--mono); font-size:13px; color:var(--muted)}
+
+/* pipeline */
+.pipe{display:flex; flex-direction:column; gap:2px}
+.stage{display:grid; grid-template-columns:150px 1fr; gap:16px; align-items:baseline;
+  padding:11px 16px; background:var(--surface); border:1px solid var(--hair)}
+.pipe .stage:first-child{border-radius:12px 12px 0 0}
+.pipe .stage:last-child{border-radius:0 0 12px 12px}
+.pipe .stage+.stage{border-top:none}
+.stage .sn{font-family:var(--mono); font-weight:600; font-size:14px; color:var(--accent)}
+.stage .sd{color:var(--muted); font-size:14.5px}
+.stage.final{background:var(--accent-soft)}
+.stage.final .sd{color:var(--ink)}
+
+/* module map */
+.layer{margin-bottom:26px}
+.layer-h{display:flex; align-items:center; gap:12px; margin-bottom:12px}
+.layer-h .lbl{font-family:var(--mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--faint); white-space:nowrap}
+.layer-h .rule{height:1px; background:var(--hair); flex:1}
+.mods{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
+.mod{background:var(--surface); border:1px solid var(--hair); border-radius:10px; padding:13px 15px;
+  transition:border-color .18s ease}
+.mod:hover{border-color:var(--accent)}
+.mod .fn{font-family:var(--mono); font-size:13.5px; font-weight:600; color:var(--ink)}
+.mod .fn .py{color:var(--faint); font-weight:400}
+.mod p{margin:4px 0 0; font-size:13px; color:var(--muted); line-height:1.45}
+
+/* tables */
+.tblwrap{overflow-x:auto; border:1px solid var(--hair); border-radius:12px; background:var(--surface)}
+.tbl{width:100%; border-collapse:collapse; font-size:14.5px}
+.tbl th,.tbl td{text-align:left; padding:11px 14px; border-bottom:1px solid var(--hair); vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl th{font-family:var(--mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); font-weight:600}
+.tbl td.id{white-space:nowrap; font-family:var(--mono); font-size:13px; font-weight:600; color:var(--accent)}
+.tbl td.tech{font-family:var(--mono); font-size:12.5px; color:var(--muted)}
+.tbl td.val{font-size:13.5px; color:var(--muted); white-space:nowrap}
+.tbl caption{caption-side:top; text-align:left; padding:14px 14px 4px; font-weight:650; font-size:15px}
+.tbl caption span{display:block; font-weight:400; font-size:13.5px; color:var(--muted)}
+.num{text-align:right !important; font-variant-numeric:tabular-nums; font-family:var(--mono); white-space:nowrap}
+.tbl th.num{white-space:normal}
+.tbl td.num.best{color:var(--ink); font-weight:700}
+.tbls{display:grid; gap:18px}
+
+/* highlights */
+.hl{display:grid; grid-template-columns:1fr; gap:16px}
+.hl .item{background:var(--surface); border:1px solid var(--hair); border-radius:12px; padding:22px 24px}
+.hl .item h3{font-size:1.05rem; margin:0 0 8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.hl .item p{margin:0; color:var(--muted); font-size:15px; line-height:1.6; max-width:78ch}
+.perf{font-family:var(--mono); font-size:13px; font-weight:600; white-space:nowrap;
+  padding:3px 10px; border-radius:20px; background:var(--accent-soft); color:var(--accent)}
+.perf .arrow{color:var(--muted)}
+
+/* quick start */
+pre.code{background:var(--inset); border:1px solid var(--hair); border-radius:12px; padding:16px 18px;
+  overflow-x:auto; font-family:var(--mono); font-size:13.5px; line-height:1.7; margin:0; color:var(--ink)}
+pre.code .c{color:var(--faint)}
+
+/* footer */
+footer{border-top:1px solid var(--hair); padding:40px 0 56px; color:var(--muted); font-size:13.5px}
+footer .mono{color:var(--faint)}
+.stack{font-size:15px; color:var(--muted); line-height:1.9}
+.stack b{color:var(--ink); font-weight:600; font-family:var(--mono); font-size:13.5px}
+
+@media (max-width:820px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  .mods{grid-template-columns:1fr 1fr}
+  .stats{grid-template-columns:1fr 1fr}
+  .stage{grid-template-columns:120px 1fr}
+}
+@media (max-width:520px){
+  body{font-size:16px}
+  .wrap{padding:0 16px}
+  .mods{grid-template-columns:1fr}
+  .stage{grid-template-columns:1fr; gap:2px}
+  .btn.primary{width:100%; justify-content:center}
+  .nav{margin-left:0; width:100%}
+}
+@media (prefers-reduced-motion:no-preference){
+  .reveal{opacity:0; transform:translateY(12px); animation:up .6s cubic-bezier(.2,.7,.3,1) forwards}
+  @keyframes up{to{opacity:1; transform:none}}
+}
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <circle cx="6" cy="22" r="3.2" stroke="currentColor" stroke-width="1.5"/>
+    <circle cx="16" cy="10" r="3.2" stroke="currentColor" stroke-width="1.5"/>
+    <circle cx="26" cy="22" r="3.6" fill="currentColor"/>
+    <path d="M8.1 19.4 13.9 12.6M18.1 12.6l5.6 6.6" stroke="currentColor" stroke-width="1.5"/>
+  </svg>
+  <div class="wordmark"><b>crabwalk</b> · proje</div>
+  <nav class="nav" aria-label="Bağlantılar">
+    <a href="demo/index.html">Canlı demo</a>
+    <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/DETECTIONS.md">Kurallar</a>
+    <a href="https://github.com/IlkerUnver00/crabwalk">GitHub</a>
+  </nav>
+</header>
+
+<main>
+<div class="wrap hero reveal">
+  <span class="eyebrow"><span lang="en">Windows</span> EVTX yanal hareket avcısı</span>
+  <h1>Saldırgan nereye girdi, sonra nereye geçti?</h1>
+  <p class="lede"><b>crabwalk</b> birden çok makinenin Windows olay günlüklerini (EVTX) okur;
+    oturum açmalarını, servis kurulumlarını, named pipe'ları, süreç ağaçlarını ve dosya
+    bırakmalarını makineler arasında ilişkilendirir. Sonucu bir saldırı yolu grafiği ve tarihli
+    bir saldırı hikâyesi olarak anlatır, her bulguyu MITRE ATT&amp;CK'e eşler.
+    <span class="mono" style="color:var(--faint);font-size:.85em">(Yengeçler yan yürür. Saldırganlar da.)</span></p>
+  <p class="warn">// tamamen çevrimdışı · çalışma zamanında yalnızca evtx (Python 3.10'da ayrıca tomli) · bir Sigma motorunun yerine değil, yanında çalışır</p>
+
+  <div class="cta">
+    <a class="btn primary" href="demo/index.html">Canlı demoyu aç <span aria-hidden="true">→</span></a>
+    <a class="btn" href="https://github.com/IlkerUnver00/crabwalk">Kaynak kod <span class="sub">GitHub</span></a>
+    <a class="btn" href="https://github.com/IlkerUnver00/crabwalk/releases/tag/v{{version}}">Sürüm <span class="sub mono">v{{version}}</span></a>
+  </div>
+
+  <div class="spectrum">
+    <div class="cap">Demo dosyalarındaki bulgular, önem derecesine göre</div>
+    {{severity_bar}}
+    <div class="ticks"><span>demo/evtx · {{demo_files}} dosya · {{demo_records}} kayıt</span><span>{{demo_findings}} bulgu · {{demo_edges}} saldırı yolu kenarı · {{demo_techniques}} ATT&amp;CK tekniği</span></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n">{{rule_count}}</div><div class="l">tespit kuralı · her bulgu ATT&amp;CK tekniğiyle</div></div>
+    <div class="stat"><div class="n">464</div><div class="l">test · 428'i CI'da (Python 3.10–3.12), 36 korpus testi yerelde</div></div>
+    <div class="stat"><div class="n">571</div><div class="l">herkese açık EVTX dosyasında çalıştırıldı · iki bağımsız korpus</div></div>
+    <div class="stat"><div class="n">3/3</div><div class="l">CW-016 kör puanlandı: 3 RDP-hijack dosyasının 3'ünde tetiklendi, diğer 290 dosyada sessiz</div></div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Canlı demo</span>
+    <h2>Dokuz dosya, bir saldırı yolu</h2>
+    <p class="sec-intro">Depodaki dokuz herkese açık laboratuvar EVTX dosyası (EVTX-ATTACK-SAMPLES)
+      her push'ta yeniden işlenir ve yayımlanır: {{demo_findings}} bulgu, ana zinciri aşağıda
+      gösterilen saldırı yolu ve bunları tarih sırasıyla anlatan hikâye. Demo sayfaları İngilizcedir.</p>
+    <div class="path" role="group" aria-label="Demodaki saldırı yolu">
+      <span class="host first">NLLT108334</span><span class="arr" role="img" aria-label="ardından">→</span>
+      <span class="host">PC01</span><span class="arr" role="img" aria-label="ardından">→</span>
+      <span class="host">WIN-77LTAPHIQ1R</span>
+      <span class="also">(ayrıca: IEWIN7)</span>
+    </div>
+    <div class="grid3">
+      <a class="card" href="demo/index.html"><span class="k">Başlangıç</span><h3>Saldırı hikâyesi <span class="go">→</span></h3>
+        <p>Ne oldu, adım adım: her satır bir makineden diğerine geçiş ya da bir makinedeki bir bulgu
+          kümesi; kim olarak, nereden, ne zaman.</p></a>
+      <a class="card" href="demo/report.html"><span class="k">HTML</span><h3>Rapor <span class="go">→</span></h3>
+        <p>Tek dosyalık rapor: hikâye, saldırı yolları, önem dereceleri, ATT&amp;CK kapsamı, makine
+          başına zaman çizelgesi, makineler arası hareket tablosu ve sıralı bulgular.</p></a>
+      <a class="card" href="demo/attack-paths.html"><span class="k">Grafik</span><h3>Saldırı yolları <span class="go">→</span></h3>
+        <p>Makine başına bir düğüm; bir makinenin üzerine gelin ya da tıklayın, saldırganın nereden
+          geldiğini ve nereye gittiğini izleyin.</p></a>
+      <a class="card" href="{{navigator_href}}"><span class="k">ATT&amp;CK</span>{{navigator_card}}</a>
+      <a class="card" href="demo/story.md"><span class="k">Markdown</span><h3>story.md <span class="go">→</span></h3>
+        <p>Aynı hikâye, <code>crabwalk hunt --story</code> çıktısı olarak: bir vaka dosyasına ya da
+          ticket'a yapıştırmak için.</p></a>
+      <a class="card" href="demo/findings.json"><span class="k">JSON</span><h3>findings.json <span class="go">→</span></h3>
+        <p>Ham bulgular ve hikâye; kanıt her kaydı EventRecordID'siyle, yani Event Viewer'ın
+          gösterdiği numarayla alıntılar.</p></a>
+    </div>
+    <p class="note">Bu dosyalar ayrı ayrı kaydedilmiştir, tek bir saldırı değildir. crabwalk onları
+      makine adlarının ve adreslerin tekrar ettiği yerde birleştirir; yol, bu bağlamanın ne yaptığını
+      gösterir, bir saldırının kanıtı değildir. NLLT108334 → PC01 bağlantısı yalnızca
+      <code>10.0.2.16</code> adresine dayanır ve bu adres dört hafta arayla iki ilgisiz dosyada
+      geçer. Demonun hikâyesi bunu kendisi söyler ve aradaki boşluklar için uyarıyla başlar.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Tasarım ilkeleri</span>
+    <h2>Beş karar</h2>
+    <p class="sec-intro">Bir sızmanın ardından her SOC/DFIR ekibi aynı soruyu yanıtlar. Araç, bu
+      yanıtı bir analistin savunabileceği biçimde vermek için beş karar etrafında kuruldu.</p>
+    <div class="grid2">
+      <div class="card"><span class="k">Korelasyon</span><h3>Olay değil, saldırı adımı</h3>
+        <p>Bir kural motoru olayları tek tek raporlar; crabwalk'un korelasyon kuralları onları
+          bulgulara bağlar. Bir PsExec çalıştırmasının paylaşım erişimi, pipe açılışları ve servis
+          kurulumu tek bir CW-012 bulgusudur. Başka bir kuralın bulgusu, ancak alıntıladığı kayıtların
+          hepsi bu bulguda da varsa, teknikleri ve önem derecesi bununkileri aşmıyorsa, aynı
+          makinedeyse, hesabı ve kaynağı (biliniyorsa) bununkilerle aynıysa ve ikisi arasında en fazla
+          10 dakika varsa <span lang="en">"also matched"</span> olarak onun altına katlanır. Kim ya da nereden konusunda ayrışan bulgular ayrı kalır: birleştirme bir
+          aktörü, kaynağı ya da zamanı asla düşürmez.</p></div>
+      <div class="card"><span class="k">Kanıt</span><h3>Kayıt ne diyorsa o</h3>
+        <p>Her bulgunun eylem cümlesi yalnızca kaydın gösterdiğini söyler: <span lang="en">"copied"</span>
+          demek için yazma hakkı içeren bir AccessMask gerekir. Sysmon 3'te Source/Destination
+          yerel/uzak diye okunmaz, çünkü gelen bağlantı kayıtları bu makineyi iki taraftan birine
+          koyabilir; kayıt karşı tarafı söyleyemiyorsa kaynak boş kalır.</p></div>
+      <div class="card"><span class="k">Güvenlik</span><h3>Çevrimdışı, en az bağımlılık</h3>
+        <p>Çalışma zamanında yalnızca <span class="mono">evtx</span> (Rust tabanlı pyevtx-rs) ve
+          Python 3.10'da TOML için <span class="mono">tomli</span>. Ağa hiç çıkmaz. HTML rapor tek
+          dosyadır: satır içi CSS, Python'da üretilen SVG, JavaScript yok. İnternetsiz bir analiz
+          makinesinde açılır.</p></div>
+      <div class="card"><span class="k">Ayar</span><h3><span lang="en">Fail-closed</span> allowlist</h3>
+        <p>Gürültü bir TOML dosyasıyla bastırılır. Kayıt alanlarına (<span class="mono">fields</span>)
+          dayanan bir girişte her kanıt kaydı bir tabloyla tümüyle eşleşmeli ve her tablo, kaydın ne
+          olduğunu söyleyen bir alan (ServiceName, ImagePath, PipeName, CommandLine…) içermelidir;
+          alanlara dayanmayan bir giriş kullanıcı, makine ya da kaynak ölçütlerinden en az biriyle
+          sınırlanmalıdır. Boş tablolar,
+          tanımlayıcı alanı olmayan tablolar ve her değeri kabul eden regex'ler yüklenirken
+          reddedilir; kanıtın yalnızca bir kısmını tanımlayan girişler ve verideki hiçbir kayıtta
+          birlikte geçmeyen alanlar uyarı verir. Bastırılan bulgular sayılarda, JSON'da ve raporda
+          görünür kalır.</p></div>
+      <div class="card wide"><span class="k">Dayanıklılık</span><h3>Bozuk kanıt asla ölümcül değil</h3>
+        <p>Açılamayan dosyalar (sıfır bayt, kilitli, EVTX değil) ve okunamayan kayıtlar sayılır ve
+          atlanır; çalışma durmaz. Dosya düzeyindeki sorunların hepsi raporlanır. Örtüşen dışa
+          aktarımlardaki aynı kayıt (makine, kanal, EventRecordID, zaman) tek kayda iner. Bozuk girdi
+          yüzünden CLI, yalnızca dosyalar hata verdiyse ve hiç kayıt okunamadıysa 1 koduyla çıkar.
+          Tüm zamanlar UTC'dir.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Boru hattı</span>
+    <h2>crabwalk hunt</h2>
+    <p class="sec-intro">Kuralların çoğu tek tek olayların değil, olaylardan kurulan durumun üstünde
+      çalışır: makine başına oturumlar, makineler arası kenarlar, birleştirilmiş servis kurulumları.
+      Analiz ve sunum ayrıktır; çıktıların hepsi aynı bulgu listesini okur.</p>
+    <div class="pipe">
+      <div class="stage"><div class="sn">parse</div><div class="sd">EVTX → normalize edilmiş olay akışı; 10 kanalda 54 olay ID'si, yüksek hacimli ID'ler (Sysmon 11/13) okunurken daraltılır</div></div>
+      <div class="stage"><div class="sn">dedup</div><div class="sd">örtüşen dışa aktarımlar: aynı kayıt (makine, kanal, EventRecordID, zaman) bir kez sayılır</div></div>
+      <div class="stage"><div class="sn">sessions</div><div class="sd">LogonId yaşam döngüleri, gelen uzak oturum kenarları (4624, RDP), giden açık kimlik bilgisi kenarları (4648), 4672 ile ayrıcalık</div></div>
+      <div class="stage"><div class="sn">context</div><div class="sd">servis kurulumları 7045 + 4697 + Sysmon 13 birleşik; IP ↔ makine adı çözümleme; bir bağlantının karşı tarafı</div></div>
+      <div class="stage"><div class="sn">rules</div><div class="sd">{{rule_count}} kural, tema başına bir modül → bulgu: teknik, önem derecesi, makine, hesap, kaynak, kanıt</div></div>
+      <div class="stage"><div class="sn">merge · allow</div><div class="sd">bir bulgunun kayıtlarını, tekniklerini ve aktörünü zaten anlatan başka bir kuralın bulgusu onu içine alır; TOML allowlist kurallardan sonra eler, elenenler görünür kalır</div></div>
+      <div class="stage"><div class="sn">graph</div><div class="sd">makine başına bir düğüm; kenarlar oturum hareketinden ve kaynağı bilinen bulgulardan; yerleşim DAG üzerinde en uzun yol</div></div>
+      <div class="stage"><div class="sn">story</div><div class="sd">her satır bir kenar ziyareti ya da bir kuralın bir makinedeki bulgu kümesi; 7 günden uzun boşluklar için önce uyarı</div></div>
+      <div class="stage final"><div class="sn">output</div><div class="sd">konsol · JSON · tek dosya HTML rapor · grafik (HTML, DOT, JSON) · Markdown hikâye · ATT&amp;CK Navigator katmanı</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Kapsam</span>
+    <h2>{{rule_count}} kural, yanal hareket ve çevresi</h2>
+    <p class="sec-intro">Kapsam bilerek dar: uzaktan çalıştırma, hareketi mümkün kılan kimlik bilgisi
+      saldırıları ve iz silme. Her kuralın veri kaynakları, mantığı, ayarları, yanlış pozitifleri ve
+      kör noktaları <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/DETECTIONS.md">tespit
+      referansında</a>.</p>
+    <div class="tblwrap" tabindex="0" role="region" aria-label="Kurallar">
+      <table class="tbl">
+        <tr><th>Kural</th><th>Ne yakalar</th><th>ATT&amp;CK</th><th>Doğrulama</th></tr>
+        <tr><td class="id">CW-001</td><td>Uzak oturum açmanın ardından servis kurulumu (PsExec tarzı)</td><td class="tech">T1021.002 (RDP sonrası T1021.001), T1543.003</td><td class="val">birim testleri</td></tr>
+        <tr><td class="id">CW-002</td><td>Makineler arası RDP zinciri</td><td class="tech">T1021.001</td><td class="val">birim testi</td></tr>
+        <tr><td class="id">CW-003</td><td>Pass-the-hash izleri; aynı kaynaktan, aynı hesapla ve aynı makinede art arda gelen ayrıcalıklı NTLM oturum açmaları tek bulgu</td><td class="tech">T1550.002</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-004</td><td>Uzak oturumdan zamanlanmış görev oluşturma</td><td class="tech">T1053.005</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-005</td><td>Yönetim paylaşımında (ADMIN$, C$) çalıştırılabilir dosya</td><td class="tech">T1021.002, T1570</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-006</td><td>WMI ile başlatılan süreç</td><td class="tech">T1047</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-007</td><td>WinRM ile uzaktan çalıştırma (wsmprovhost, winrshost)</td><td class="tech">T1021.006</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-008</td><td>Şüpheli PowerShell script block</td><td class="tech">T1059.001</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-009</td><td>Olay günlüğü temizleme; toplu temizleme tek bulgu</td><td class="tech">T1070.001</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-010</td><td>Kerberoasting (RC4 servis bileti)</td><td class="tech">T1558.003</td><td class="val">birim testleri</td></tr>
+        <tr><td class="id">CW-011</td><td>DCSync (dizin replikasyonu)</td><td class="tech">T1003.006</td><td class="val">korpus</td></tr>
+        <tr><td class="id">CW-012</td><td>Named pipe üzerinden uzaktan çalıştırma: PsExec, RemCom/impacket, PAExec, CSExec, Cobalt Strike; PsExec'te kaynak makine pipe adından</td><td class="tech">T1021.002 (yalnızca uzak), T1569.002 (araç pipe'ı, svcctl/ntsvcs ya da kurulum); destekleyen kayıtla T1543.003, T1053.005, T1570</td><td class="val">korpus: 6 pozitif, 4 negatif</td></tr>
+        <tr><td class="id">CW-013</td><td>DCOM ile çalıştırma</td><td class="tech">T1021.003</td><td class="val">korpus: 2 pozitif, 1 negatif</td></tr>
+        <tr><td class="id">CW-014</td><td>Başka bir makineden Startup klasörüne yazma (SMB ya da RDP)</td><td class="tech">T1547.001 (+T1021.002, T1570 ya da T1021.001)</td><td class="val">korpus: 2 pozitif, 2 negatif</td></tr>
+        <tr><td class="id">CW-015</td><td>RDP istemcisinin sürücüsünden (<span class="mono">\\tsclient</span>) program çalıştırma</td><td class="tech">T1021.001, T1570</td><td class="val">korpus: 1 pozitif</td></tr>
+        <tr><td class="id">CW-016</td><td>RDP oturumunu ele geçirme (tscon)</td><td class="tech">T1563.002 (+T1543.003)</td><td class="val">üçüncü korpus; ikincide kör 3/3</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Modül haritası</span>
+    <h2>22 modül, dört katman</h2>
+    <p class="sec-intro">Odaklı, tek sorumluluklu modüller. Kurallar tema başına bir modülde durur ve
+      hepsi <span class="mono">ALL_RULES</span> listesinde toplanır.</p>
+
+    <div class="layer">
+      <div class="layer-h"><span class="lbl">Okuma &amp; durum</span><span class="rule"></span></div>
+      <div class="mods">
+        <div class="mod"><div class="fn">parser<span class="py">.py</span></div><p>EVTX → olay, tekilleştirme; bozuk dosya ya da kayıt sayılır, asla ölümcül değil</p></div>
+        <div class="mod"><div class="fn">catalog<span class="py">.py</span></div><p>okunan olay ID'leri ve okurken içerik filtreleri</p></div>
+        <div class="mod"><div class="fn">models<span class="py">.py</span></div><p>NormalizedEvent: her kanaldan olay için tek biçim</p></div>
+        <div class="mod"><div class="fn">sessions<span class="py">.py</span></div><p>makine başına oturumlar, makineler arası kenarlar</p></div>
+        <div class="mod"><div class="fn">hosts<span class="py">.py</span></div><p>makine kimliği: IP ↔ ad, kısa ad, anonim ve makine hesapları</p></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-h"><span class="lbl">Kurallar · rules/</span><span class="rule"></span></div>
+      <div class="mods">
+        <div class="mod"><div class="fn">__init__<span class="py">.py</span></div><p>ALL_RULES, kuralları çalıştırma ve bulguları birleştirme (merge_overlaps)</p></div>
+        <div class="mod"><div class="fn">base<span class="py">.py</span></div><p>Rule, Finding, HuntContext: kuralların paylaştığı durum</p></div>
+        <div class="mod"><div class="fn">lateral<span class="py">.py</span></div><p>CW-001…005: servis kurulumu, RDP zinciri, pass-the-hash, görev, paylaşım</p></div>
+        <div class="mod"><div class="fn">pipes<span class="py">.py</span></div><p>CW-012: named pipe ile uzaktan çalıştırma</p></div>
+        <div class="mod"><div class="fn">execution<span class="py">.py</span></div><p>CW-006, 007, 008, 013: WMI, WinRM, PowerShell, DCOM</p></div>
+        <div class="mod"><div class="fn">remote_files<span class="py">.py</span></div><p>CW-014, 015: Startup klasörü, <span class="mono">\\tsclient</span></p></div>
+        <div class="mod"><div class="fn">rdp<span class="py">.py</span></div><p>CW-016: tscon ile oturum ele geçirme</p></div>
+        <div class="mod"><div class="fn">credentials<span class="py">.py</span></div><p>CW-010, 011: Kerberoasting, DCSync</p></div>
+        <div class="mod"><div class="fn">antiforensics<span class="py">.py</span></div><p>CW-009: olay günlüğü temizleme</p></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-h"><span class="lbl">Korelasyon &amp; ayar</span><span class="rule"></span></div>
+      <div class="mods">
+        <div class="mod"><div class="fn">graph<span class="py">.py</span></div><p>saldırı yolu grafiği; DOT, JSON, SVG, tek başına HTML</p></div>
+        <div class="mod"><div class="fn">narrative<span class="py">.py</span></div><p>saldırı hikâyesi: konsol, Markdown, rapor</p></div>
+        <div class="mod"><div class="fn">config<span class="py">.py</span></div><p>TOML ayarları ve <span lang="en">fail-closed</span> allowlist</p></div>
+        <div class="mod"><div class="fn">attack<span class="py">.py</span></div><p>kuralların ürettiği her ATT&amp;CK tekniğinin adı</p></div>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-h"><span class="lbl">Çıktı</span><span class="rule"></span></div>
+      <div class="mods">
+        <div class="mod"><div class="fn">report<span class="py">.py</span></div><p>tek dosya HTML: SVG grafik ve zaman çizelgesi, JS yok</p></div>
+        <div class="mod"><div class="fn">navigator<span class="py">.py</span></div><p>ATT&amp;CK Navigator katmanı (JSON)</p></div>
+        <div class="mod"><div class="fn">style<span class="py">.py</span></div><p>ortak CSS, açık/koyu tema, sabit önem derecesi paleti</p></div>
+        <div class="mod"><div class="fn">cli<span class="py">.py</span></div><p><span class="mono">parse · sessions · hunt · config</span></p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Mühendislik öne çıkanları</span>
+    <h2>Kural yazmanın ötesi</h2>
+    <p class="sec-intro">Bir mülakatta anlatmaya değer işler: bir kaydın içinden çıkan bilgi, kör
+      ölçüm ve ölçümün gösterdiği hatalar.</p>
+    <div class="hl">
+      <div class="item"><h3>Kaynak makine, hedefin kendi günlüğünden <span class="perf">IP <span class="arrow">→</span> NLLT108334</span></h3>
+        <p>Adı değiştirilmiş bir PsExec yalnızca hedef makinenin paylaşım erişim günlüğünde (5145)
+          görünüyordu; bu dosyada Hayabusa 4.1.0 yalnızca bilgi (<span lang="en">informational</span>)
+          düzeyinde iki alarm verdi, Chainsaw 2.16.5 hiç alarm vermedi. PsExec'in stdio pipe adları
+          <code>&lt;servis&gt;-&lt;kaynak&gt;-&lt;pid&gt;-stdin</code> biçimindedir, burada
+          <code>blabla-NLLT108334-37048-stdin</code>: CW-012 kaynağı bu adlardan çıkarır, servisin
+          yeniden adlandırıldığını söyler ve bulguyu grafikte bir kenar yapar.
+          <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/writeups/01-renamed-psexec-source-host.md">Vaka yazısı</a></p></div>
+      <div class="item"><h3>Kör koşu, olduğu gibi yayımlandı <span class="perf">3/18 <span class="arrow">→</span> 6/18</span></h3>
+        <p>İkinci bir korpus (EVTX-to-MITRE-Attack, 293 dosya), hiçbir kural ona göre yazılmadan önce
+          kör olarak tarandı. Yanal hareket klasöründe crabwalk 18 dosyanın 3'ünde yanal hareket alarmı
+          verdi, Hayabusa 6'sında, Chainsaw 5'inde: ilk korpustaki üstünlük gitmişti. Bu sonuç ham
+          hâliyle yayımlandı; ardından yapılan her değişiklik, onu neyin tetiklediğiyle birlikte
+          listelendi. Bugün 6 dosya, Hayabusa'yla eşit.</p></div>
+      <div class="item"><h3>Önce dondur, sonra puanla: CW-016 <span class="perf">3/3 · 290 dosyada 0</span></h3>
+        <p>RDP oturumunu ele geçirme kuralı, bağımsız üçüncü bir korpustaki bir dosyadan ve Microsoft
+          belgelerinden yola çıkılarak tasarlandı, gözden geçirildi ve donduruldu; ancak bundan sonra
+          ikinci korpus üzerinde çalıştırıldı. Daha önce okunmamış üç RDP-hijack dosyasının üçünde de
+          tetiklendi, diğer 290 dosyanın hiçbirinde tetiklenmedi. Bir kural ve üç dosya bir tespit
+          oranı değildir; ama bu korpusta, kural yazılırken görülmemiş tek sonuç budur.</p></div>
+      <div class="item"><h3>Alarm fırtınası değil, bulgu <span class="perf">91 <span class="arrow">→</span> 3</span></h3>
+        <p>Kör koşuda tek bir dosya, 91 olay günlüğünün temizlenmesi için 91 ayrı bulgu üretti: önce
+          birkaç dakika arayla System ve Security, ardından 3 saniye içinde 89 kanal. Artık aynı makinede
+          ve aynı hesapla yapılan, her biri bir öncekinden en fazla bir dakika sonra gelen
+          temizlemeler tek bulgudur; 8 saniyedeki 14 NTLM oturum açması da tek bulgu olur ve sayısını taşır. İkinci
+          korpusun yol açtığı değişikliklerin hepsiyle birlikte, korpusun tamamında alarm sayısı
+          180'den 72'ye indi.</p></div>
+      <div class="item"><h3>Yanlış bir "kritik" kaynağında düzeltildi <span class="perf">critical <span class="arrow">→</span> medium, yerel</span></h3>
+        <p>Bir makinenin kendi üzerinde çalıştırılan PsExec, servis pipe'ına SMB loopback üzerinden
+          ulaştığı için kritik yanal hareket olarak raporlanıyordu. İlk korpustaki yerel örnek adı
+          değiştirilmiş bir servis kullandığından bu boşluk görünmemişti. Artık yerel bir çalıştırma
+          yerel kalır; yanındaki gerçek bir uzak PsExec ise uzak kalır.</p></div>
+      <div class="item"><h3>Event Viewer'da bulunabilen kanıt <span class="perf">20–22 <span class="arrow">→</span> 84050–84052</span></h3>
+        <p>Kanıt önce kaydın dosyadaki sırasını alıntılıyordu ve filtrelenmiş bir dışa aktarım bu sırayı
+          yeniden numaralar. Artık her kanıt <code>System/EventRecordID</code>'yi, yani Event
+          Viewer'ın gösterdiği ve her dışa aktarımın koruduğu numarayı taşır. Vaka yazısındaki üç
+          stdio pipe kaydı böylece 20–22 değil, 84050–84052'dir.</p></div>
+      <div class="item"><h3>İki motorda hata bulundu <span class="perf">hayabusa#1932 · chainsaw#245</span></h3>
+        <p>Karşılaştırma sırasında SigmaHQ'nun <i lang="en">Suspicious PsExec Execution</i> kuralının
+          iki motorda da hiç tetiklenmediği görüldü. Kural, <code>ShareName</code> değerindeki düz
+          <code>*</code> karakterini kaçış karakteriyle yazar. Bu satırın
+          <code>ShareName|endswith: 'IPC$'</code> ile değiştirildiği bir kopyası ise aynı üç kayıtta
+          iki motorda da tetiklendi; yani eksik olan kapsam değil, kaçışlı değerin eşleştirilmesiydi.
+          İki projeye de bildirildi:
+          <a href="https://github.com/Yamato-Security/hayabusa/issues/1932">Hayabusa'da</a> 4.2.0
+          sürümünde düzeltildi,
+          <a href="https://github.com/WithSecureOpenSource/chainsaw/issues/245">Chainsaw'daki bildirim</a>
+          hâlâ açık. Bu sayfadaki karşılaştırma, düzeltmeden önceki Hayabusa 4.1.0 ile yapıldı.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Ölçüm</span>
+    <h2>Hayabusa ve Chainsaw ile aynı dosyalarda</h2>
+    <p class="sec-intro">Üç araç da aynı dosyaları dosya dosya, her biri kendi sürümüyle gelen
+      kurallarla işledi. Ölçü kaba: orta ya da daha yüksek düzeyde bir alarm var mı ve bu
+      alarm yanal hareket (TA0008 ya da T1021, T1570, T1550, T1563 …) olarak etiketlenmiş mi?</p>
+    <div class="tbls">
+      <div class="tblwrap" tabindex="0" role="region" aria-label="İlk korpus sonuçları">
+        <table class="tbl">
+          <caption>İlk korpus: EVTX-ATTACK-SAMPLES, Lateral Movement (47 dosya)
+            <span>crabwalk'un kuralları bu korpus üzerinde yazıldı; tablo bu yüzden crabwalk lehinedir.</span></caption>
+          <tr><th>Ölçü</th><th class="num">crabwalk ilk koşu → bugün</th><th class="num" lang="en">Hayabusa 4.1.0</th><th class="num" lang="en">Chainsaw 2.16.5</th></tr>
+          <tr><td>Orta+ alarm veren dosya</td><td class="num">16 → 22</td><td class="num best">29</td><td class="num">27</td></tr>
+          <tr><td>Yanal hareket alarmı veren dosya</td><td class="num best">10 → 16</td><td class="num">8</td><td class="num">6</td></tr>
+          <tr><td>Orta+ alarm sayısı</td><td class="num">34 → 41</td><td class="num">130</td><td class="num">110</td></tr>
+        </table>
+      </div>
+      <div class="tblwrap" tabindex="0" role="region" aria-label="İkinci korpus sonuçları">
+        <table class="tbl">
+          <caption>İkinci korpus: EVTX-to-MITRE-Attack (293 dosya)
+            <span>Kör koşuya kadar hiçbir kural bu korpusa göre yazılmamıştı. crabwalk sütununda okun sağındaki (bugün) değerler, bu korpusun sonuçlarından yapılan dört değişiklikten ve kör puanlanan CW-016'dan sonra ölçüldü.</span></caption>
+          <tr><th>Ölçü</th><th class="num">crabwalk kör → bugün</th><th class="num" lang="en">Hayabusa 4.1.0</th><th class="num" lang="en">Chainsaw 2.16.5</th></tr>
+          <tr><td>TA0008 klasörü (18): orta+ alarm veren dosya</td><td class="num">4 → 7</td><td class="num best">11</td><td class="num">7</td></tr>
+          <tr><td>TA0008 klasörü: yanal hareket alarmı veren dosya</td><td class="num best">3 → 6</td><td class="num best">6</td><td class="num">5</td></tr>
+          <tr><td>293 dosya: orta+ alarm veren dosya</td><td class="num">53 → 56</td><td class="num best">148</td><td class="num">117</td></tr>
+          <tr><td>293 dosya: yanal hareket alarmı veren dosya</td><td class="num">17 → 20</td><td class="num best">27</td><td class="num">15</td></tr>
+          <tr><td>293 dosya: orta+ alarm sayısı</td><td class="num">180 → 72</td><td class="num">2.000</td><td class="num">1.352</td></tr>
+        </table>
+      </div>
+    </div>
+    <p class="note">Motorlar daha çok dosya işaretler; crabwalk bilerek dardır ve bir Sigma motorunun
+      yanında çalışmak içindir. İlk korpusta ise 5 dosyada orta+ alarmı yalnızca crabwalk verdi:
+      dördü hedef makinenin paylaşım erişim günlüğü (5145), biri WinRM/Operational günlüğü.
+      Dosyalar laboratuvarda üretilmiş kısa örneklerdir, dosya başına bir teknik; sahadaki yanlış
+      pozitifler ölçülmedi. Ayarlar, sürümlerin SHA-256 özetleri, dosya başına sonuçlar ve her
+      değişikliğin gerekçesi:
+      <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/BENCHMARK.md">BENCHMARK.md</a>.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Hızlı başlangıç</span>
+    <h2>Otuz saniyede ilk bulgu</h2>
+    <p class="sec-intro">Depo dokuz küçük saldırı dosyasıyla gelir: klonladıktan hemen sonra crabwalk'u
+      bunlar üzerinde çalıştırıp ilk bulguları görebilirsiniz.</p>
+<pre class="code" tabindex="0">git clone https://github.com/IlkerUnver00/crabwalk.git
+cd crabwalk
+pip install -e .
+crabwalk hunt demo/evtx --report report.html --graph attack-paths.html --story story.md
+<span class="c"># kendi dosyalarınız: crabwalk hunt C:\vaka\evtx --out findings.json --layer nav.json</span></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="eyebrow">Test &amp; teknoloji</span>
+    <h2>Doğrulama ve yığın</h2>
+    <p class="sec-intro">Her kural elle kurulmuş olaylarla sınanır. 16 kuraldan 13'ü gerçek saldırı
+      dosyalarında da doğrulandı; CW-001, CW-002 ve CW-010 yalnızca birim testleriyle.</p>
+    <div class="grid2">
+      <div class="card"><span class="k">464 test</span><h3>Sentetik olaylar, gerçek dosyalar</h3>
+        <p>Birim testleri her kuralı elle kurulmuş olaylarla ve saldırganın varyantlarıyla sınar.
+          Referans listesi (<span lang="en">ground truth</span>), EVTX-ATTACK-SAMPLES'tan 22 (dosya,
+          teknik, kural) girdisinin her birinde beklenen kuralın o dosyada tetiklendiğini ve beklenen
+          tekniğin bulgularda yer aldığını, başka saldırılara ait 7 dosyada ise ilgili kuralın sessiz kaldığını doğrular; her
+          dosya tek başına işlenir. Demo dosyalarının beklenen sonuçları testlerde sabittir; her CI koşusu bunları yeniden
+          denetler. 36
+          korpus testi, korpus depoda olmadığı için yerelde çalışır; CI'da 428 test çalışır.</p></div>
+      <div class="card"><span class="k">Yığın</span><h3>Ağır bağımlılık yok</h3>
+        <p class="stack"><b>Python 3.10+</b> · <b>evtx</b> — EVTX ayrıştırma (pyevtx-rs)<br>
+        <b>tomli</b> — yalnızca Python 3.10'da, TOML ayarları için<br>
+        <b>pytest</b> — geliştirme · <b>GitHub Actions</b> — CI ve bu site<br>
+        <b>sigma/</b> — CW-012 sinyallerinin pySigma ile doğrulanmış Sigma çevirileri<br>
+        <span style="color:var(--faint);font-size:13px">HTML, CSS ve SVG Python'da üretilir; web çatısı yok.</span></p></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="wordmark" style="font-size:16px;margin-bottom:10px"><b>crabwalk</b> <span aria-hidden="true">🦀</span></div>
+    <p style="max-width:66ch;margin:0">crabwalk yalnızca kayıtların gösterdiğini raporlar; bulgular bir
+      müdahalenin başlangıç noktasıdır, hükmü değil. Tespitler saha verisiyle değil, herkese açık
+      laboratuvar dosyaları ve elle kurulmuş olaylarla sınandı. Her kuralın kör noktaları
+      <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/DETECTIONS.md">tespit referansında</a>.</p>
+    <p class="mono" style="margin-top:16px;font-size:12px">v{{version}} · kod MIT · demo dosyaları GPL-3.0 (EVTX-ATTACK-SAMPLES) · her push'ta yeniden üretilir</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,7 +1,8 @@
 name: Pages
 
-# Rebuilds the live demo (report, attack-path graph, Navigator layer) from
-# demo/evtx on every push to main and publishes it to GitHub Pages.
+# Rebuilds the site on every push to main and publishes it to GitHub Pages:
+# the project page at the root (scripts/project_page.html) and the live demo
+# (report, attack-path graph, Navigator layer) from demo/evtx under /demo/.
 
 on:
   push:
@@ -29,7 +30,7 @@ jobs:
         uses: actions/configure-pages@v6
       - name: Install
         run: pip install -e .
-      - name: Build the demo site
+      - name: Build the site
         run: python scripts/build_site.py --out site --base-url "${{ steps.pages.outputs.base_url }}"
       - uses: actions/upload-pages-artifact@v5
         with:

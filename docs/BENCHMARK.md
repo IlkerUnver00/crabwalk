@@ -155,7 +155,7 @@ what the linking does, not proof of an intrusion:
 
 - The NLLT108334 → PC01 link rests only on the address 10.0.2.16. It appears in two
   unrelated recordings four weeks apart, from a lab address range.
-- The [live demo](https://ilkerunver00.github.io/crabwalk/)'s story says so itself: that
+- The [live demo](https://ilkerunver00.github.io/crabwalk/demo/)'s story says so itself: that
   step's source reads "10.0.2.16 (named NLLT108334 elsewhere in the logs)", and the path
   opens with a caution about its gaps.
 
