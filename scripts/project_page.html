@@ -456,14 +456,18 @@ footer .mono{color:var(--faint)}
           düzeyinde iki alarm verdi, Chainsaw 2.16.5 hiç alarm vermedi. PsExec'in stdio pipe adları
           <code>&lt;servis&gt;-&lt;kaynak&gt;-&lt;pid&gt;-stdin</code> biçimindedir, burada
           <code>blabla-NLLT108334-37048-stdin</code>: CW-012 kaynağı bu adlardan çıkarır, servisin
-          yeniden adlandırıldığını söyler ve bulguyu grafikte bir kenar yapar.
+          yeniden adlandırıldığını söyler ve bulguyu grafikte bir kenar yapar. Aşağıdaki hatayı
+          düzelten Hayabusa 4.2.0 ve Chainsaw 2.17.1 bu dosyada artık dört kayıtta, her kural için
+          kayıt başına bir tane olmak üzere yüksek (<span lang="en">high</span>) düzeyde yedi alarm
+          veriyor; hiçbiri pipe adından kaynak makinenin adını çıkarmıyor.
           <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/writeups/01-renamed-psexec-source-host.md">Vaka yazısı</a></p></div>
       <div class="item"><h3>Kör koşu, olduğu gibi yayımlandı <span class="perf">3/18 <span class="arrow">→</span> 6/18</span></h3>
         <p>İkinci bir korpus (EVTX-to-MITRE-Attack, 293 dosya), hiçbir kural ona göre yazılmadan önce
           kör olarak tarandı. Yanal hareket klasöründe crabwalk 18 dosyanın 3'ünde yanal hareket alarmı
           verdi, Hayabusa 6'sında, Chainsaw 5'inde: ilk korpustaki üstünlük gitmişti. Bu sonuç ham
           hâliyle yayımlandı; ardından yapılan her değişiklik, onu neyin tetiklediğiyle birlikte
-          listelendi. Bugün 6 dosya, Hayabusa'yla eşit.</p></div>
+          listelendi. Bugün 6 dosya: Hayabusa 4.1.0'la eşit; aşağıdaki hatayı düzelten Hayabusa 4.2.0
+          ise 8 dosyada.</p></div>
       <div class="item"><h3>Önce dondur, sonra puanla: CW-016 <span class="perf">3/3 · 290 dosyada 0</span></h3>
         <p>RDP oturumunu ele geçirme kuralı, bağımsız üçüncü bir korpustaki bir dosyadan ve Microsoft
           belgelerinden yola çıkılarak tasarlandı, gözden geçirildi ve donduruldu; ancak bundan sonra
@@ -487,17 +491,18 @@ footer .mono{color:var(--faint)}
           yeniden numaralar. Artık her kanıt <code>System/EventRecordID</code>'yi, yani Event
           Viewer'ın gösterdiği ve her dışa aktarımın koruduğu numarayı taşır. Vaka yazısındaki üç
           stdio pipe kaydı böylece 20–22 değil, 84050–84052'dir.</p></div>
-      <div class="item"><h3>İki motorda hata bulundu <span class="perf">hayabusa#1932 · chainsaw#245</span></h3>
+      <div class="item"><h3>İki motorda hata bulundu, ikisi de düzeltti <span class="perf">hayabusa#1932 · chainsaw#245</span></h3>
         <p>Karşılaştırma sırasında SigmaHQ'nun <i lang="en">Suspicious PsExec Execution</i> kuralının
           iki motorda da hiç tetiklenmediği görüldü. Kural, <code>ShareName</code> değerindeki düz
           <code>*</code> karakterini kaçış karakteriyle yazar. Bu satırın
           <code>ShareName|endswith: 'IPC$'</code> ile değiştirildiği bir kopyası ise aynı üç kayıtta
           iki motorda da tetiklendi; yani eksik olan kapsam değil, kaçışlı değerin eşleştirilmesiydi.
-          İki projeye de bildirildi:
-          <a href="https://github.com/Yamato-Security/hayabusa/issues/1932">Hayabusa'da</a> 4.2.0
-          sürümünde düzeltildi,
-          <a href="https://github.com/WithSecureOpenSource/chainsaw/issues/245">Chainsaw'daki bildirim</a>
-          hâlâ açık. Bu sayfadaki karşılaştırma, düzeltmeden önceki Hayabusa 4.1.0 ile yapıldı.</p></div>
+          İki projeye de bildirildi ve ikisi de düzeltti:
+          <a href="https://github.com/Yamato-Security/hayabusa/issues/1932">Hayabusa</a> 4.2.0,
+          <a href="https://github.com/WithSecureOpenSource/chainsaw/issues/245">Chainsaw</a> 2.17.1
+          sürümünde. Bu türden kaçışlı paylaşım adları SigmaHQ'nun paylaşım erişimi (5145)
+          kurallarından sekizini susturuyordu; iki korpus düzeltilmiş sürümlerle yeniden ölçüldüğünde bunlardan beşi
+          tetikleniyor.</p></div>
     </div>
   </div>
 </section>
@@ -508,38 +513,43 @@ footer .mono{color:var(--faint)}
     <h2>Hayabusa ve Chainsaw ile aynı dosyalarda</h2>
     <p class="sec-intro">Üç araç da aynı dosyaları dosya dosya, her biri kendi sürümüyle gelen
       kurallarla işledi. Ölçü kaba: orta ya da daha yüksek düzeyde bir alarm var mı ve bu
-      alarm yanal hareket (TA0008 ya da T1021, T1570, T1550, T1563 …) olarak etiketlenmiş mi?</p>
+      alarm yanal hareket (TA0008 ya da T1021, T1570, T1550, T1563 …) olarak etiketlenmiş mi?
+      Motorlar, bildirdiğimiz hatayı düzelten sürümleriyle de yeniden çalıştırıldı; motor
+      sütunlarında ok, ilk sürümden düzeltilmiş sürüme gider.</p>
     <div class="tbls">
       <div class="tblwrap" tabindex="0" role="region" aria-label="İlk korpus sonuçları">
         <table class="tbl">
           <caption>İlk korpus: EVTX-ATTACK-SAMPLES, Lateral Movement (47 dosya)
             <span>crabwalk'un kuralları bu korpus üzerinde yazıldı; tablo bu yüzden crabwalk lehinedir.</span></caption>
-          <tr><th>Ölçü</th><th class="num">crabwalk ilk koşu → bugün</th><th class="num" lang="en">Hayabusa 4.1.0</th><th class="num" lang="en">Chainsaw 2.16.5</th></tr>
-          <tr><td>Orta+ alarm veren dosya</td><td class="num">16 → 22</td><td class="num best">29</td><td class="num">27</td></tr>
-          <tr><td>Yanal hareket alarmı veren dosya</td><td class="num best">10 → 16</td><td class="num">8</td><td class="num">6</td></tr>
-          <tr><td>Orta+ alarm sayısı</td><td class="num">34 → 41</td><td class="num">130</td><td class="num">110</td></tr>
+          <tr><th>Ölçü</th><th class="num">crabwalk ilk koşu → bugün</th><th class="num" lang="en">Hayabusa 4.1.0 → 4.2.0</th><th class="num" lang="en">Chainsaw 2.16.5 → 2.17.1</th></tr>
+          <tr><td>Orta+ alarm veren dosya</td><td class="num">16 → 22</td><td class="num best">29 → 31</td><td class="num">27 → 29</td></tr>
+          <tr><td>Yanal hareket alarmı veren dosya</td><td class="num best">10 → 16</td><td class="num">8 → 10</td><td class="num">6 → 9</td></tr>
+          <tr><td>Orta+ alarm sayısı</td><td class="num">34 → 41</td><td class="num">130 → 145</td><td class="num">110 → 132</td></tr>
         </table>
       </div>
       <div class="tblwrap" tabindex="0" role="region" aria-label="İkinci korpus sonuçları">
         <table class="tbl">
           <caption>İkinci korpus: EVTX-to-MITRE-Attack (293 dosya)
             <span>Kör koşuya kadar hiçbir kural bu korpusa göre yazılmamıştı. crabwalk sütununda okun sağındaki (bugün) değerler, bu korpusun sonuçlarından yapılan dört değişiklikten ve kör puanlanan CW-016'dan sonra ölçüldü.</span></caption>
-          <tr><th>Ölçü</th><th class="num">crabwalk kör → bugün</th><th class="num" lang="en">Hayabusa 4.1.0</th><th class="num" lang="en">Chainsaw 2.16.5</th></tr>
-          <tr><td>TA0008 klasörü (18): orta+ alarm veren dosya</td><td class="num">4 → 7</td><td class="num best">11</td><td class="num">7</td></tr>
-          <tr><td>TA0008 klasörü: yanal hareket alarmı veren dosya</td><td class="num best">3 → 6</td><td class="num best">6</td><td class="num">5</td></tr>
-          <tr><td>293 dosya: orta+ alarm veren dosya</td><td class="num">53 → 56</td><td class="num best">148</td><td class="num">117</td></tr>
-          <tr><td>293 dosya: yanal hareket alarmı veren dosya</td><td class="num">17 → 20</td><td class="num best">27</td><td class="num">15</td></tr>
-          <tr><td>293 dosya: orta+ alarm sayısı</td><td class="num">180 → 72</td><td class="num">2.000</td><td class="num">1.352</td></tr>
+          <tr><th>Ölçü</th><th class="num">crabwalk kör → bugün</th><th class="num" lang="en">Hayabusa 4.1.0 → 4.2.0</th><th class="num" lang="en">Chainsaw 2.16.5 → 2.17.1</th></tr>
+          <tr><td>TA0008 klasörü (18): orta+ alarm veren dosya</td><td class="num">4 → 7</td><td class="num best">11 → 12</td><td class="num">7 → 7</td></tr>
+          <tr><td>TA0008 klasörü: yanal hareket alarmı veren dosya</td><td class="num">3 → 6</td><td class="num best">6 → 8</td><td class="num">5 → 5</td></tr>
+          <tr><td>293 dosya: orta+ alarm veren dosya</td><td class="num">53 → 56</td><td class="num best">148 → 151</td><td class="num">117 → 125</td></tr>
+          <tr><td>293 dosya: yanal hareket alarmı veren dosya</td><td class="num">17 → 20</td><td class="num best">27 → 30</td><td class="num">15 → 16</td></tr>
+          <tr><td>293 dosya: orta+ alarm sayısı</td><td class="num">180 → 72</td><td class="num">2.000 → 2.029</td><td class="num">1.352 → 1.645</td></tr>
         </table>
       </div>
     </div>
     <p class="note">Motorlar daha çok dosya işaretler; crabwalk bilerek dardır ve bir Sigma motorunun
-      yanında çalışmak içindir. İlk korpusta ise 5 dosyada orta+ alarmı yalnızca crabwalk verdi:
-      dördü hedef makinenin paylaşım erişim günlüğü (5145), biri WinRM/Operational günlüğü.
+      yanında çalışmak içindir. İlk korpusta ise ilk koşuda 5 dosyada orta+ alarmı yalnızca crabwalk
+      verdi; düzeltilmiş sürümler bunlardan birini, adı değiştirilmiş PsExec'in günlüğünü de
+      yakalıyor. Kalan dördünün üçü hedef makinenin paylaşım erişim günlüğü (5145), biri
+      WinRM/Operational günlüğü.
       Dosyalar laboratuvarda üretilmiş kısa örneklerdir, dosya başına bir teknik; sahadaki yanlış
       pozitifler ölçülmedi. Ayarlar, sürümlerin SHA-256 özetleri, dosya başına sonuçlar ve her
       değişikliğin gerekçesi:
-      <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/BENCHMARK.md">BENCHMARK.md</a>.</p>
+      <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/BENCHMARK.md">BENCHMARK.md</a>
+      (yeniden ölçüm: <a href="https://github.com/IlkerUnver00/crabwalk/blob/main/docs/BENCHMARK.md#rerun-with-the-fixed-engines">düzeltilmiş motorlarla</a>).</p>
   </div>
 </section>
 

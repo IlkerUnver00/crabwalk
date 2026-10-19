@@ -27,11 +27,13 @@ every finding to MITRE ATT&CK.
   ([benchmark](docs/BENCHMARK.md)).
 - **A rule scored blind.** RDP session hijacking (CW-016) was designed on one corpus, frozen,
   then run on recordings nobody had read: it fired on all 3 and on none of the other 290 files.
-- **Bugs found in both engines.** Neither Hayabusa 4.1.0 nor Chainsaw 2.16.5 runs SigmaHQ's
-  *Suspicious PsExec Execution* rule as written; reported as
-  [Yamato-Security/hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932)
-  (fixed in Hayabusa 4.2.0) and
-  [WithSecureOpenSource/chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245).
+- **Bugs found in both engines, fixed upstream.** Neither Hayabusa 4.1.0 nor Chainsaw 2.16.5
+  runs SigmaHQ's *Suspicious PsExec Execution* rule as written; reported as
+  [Yamato-Security/hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932) and
+  [WithSecureOpenSource/chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245),
+  fixed in Hayabusa 4.2.0 and Chainsaw 2.17.1. Escaped share names like it had silenced eight
+  SigmaHQ share-access rules; the [rerun](docs/BENCHMARK.md#rerun-with-the-fixed-engines)
+  with the fixed releases shows five of them firing.
 
 **[Live demo](https://ilkerunver00.github.io/crabwalk/demo/)** — the attack story, the
 report, the interactive attack-path graph and an ATT&CK Navigator heatmap, rebuilt
@@ -80,7 +82,10 @@ multi-hop path `NLLT108334 → PC01 → WIN-77LTAPHIQ1R`, told as a [story](#the
   On a second corpus its rules never saw (293 files), the lead is gone: 3 of 18
   lateral-movement files against 6 and 5 (6 after the fixes it prompted and a
   rule scored on it blind). The page lists what that run exposed and what
-  changed because of it.
+  changed because of it. A rerun with Hayabusa 4.2.0 and Chainsaw 2.17.1, which
+  fix the bug the benchmark found, leaves crabwalk alone on four target-side
+  logs instead of five, and puts Hayabusa ahead again on those 18
+  lateral-movement files (8 against 6).
 - **[How crabwalk compares](docs/COMPARISON.md)** — Chainsaw, Hayabusa,
   Zircolite, LogonTracer, DeepBlueCLI, APT-Hunter and EvtxECmd: what each one
   does, and when to use which.
@@ -149,6 +154,9 @@ tasks and WinRM/WMI execution across hosts. crabwalk automates that triage pass.
 - [x] **Step 19** — [Project page](https://ilkerunver00.github.io/crabwalk/) (in Turkish)
       at the site root, built from `scripts/project_page.html` with the demo's numbers
       filled in; the live demo moved to [`/demo/`](https://ilkerunver00.github.io/crabwalk/demo/)
+- [x] **Step 20** — Benchmark rerun with the fixed engines (Hayabusa 4.2.0, Chainsaw
+      2.17.1) on both corpora; the first run kept as measured
+      ([rerun](docs/BENCHMARK.md#rerun-with-the-fixed-engines))
 
 ## Quickstart
 

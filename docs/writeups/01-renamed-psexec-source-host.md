@@ -193,7 +193,12 @@ with the rules they ship ([benchmark](../BENCHMARK.md#cases)). Neither raises th
 Hayabusa reports two informational *NetShare File Access* alerts for the `blabla.exe`
 records, and Chainsaw reports nothing. The rule's `ShareName` value escapes a literal `*`.
 In a copy where that one line reads `ShareName|endswith: 'IPC$'`, both engines fire on
-records 84050 to 84052.
+records 84050 to 84052. I reported it to both projects, and both fixed it: Hayabusa in
+4.2.0, Chainsaw in 2.17.1 ([rerun](../BENCHMARK.md#rerun-with-the-fixed-engines)). On this
+file each now raises seven high alerts on four records, one per rule and record: the rule on
+84050 to 84052, and *First Time Seen Remote Named Pipe*, which used the same escaped value, on
+84047 and 84050 to 84052. None of them pulls the host name out of the pipe name: they carry
+the address 10.0.2.16 and the raw pipe name, and the analyst still has to read it.
 
 crabwalk's CW-012 produces one finding with the records attached, the source address
 *and* name, and a severity that reflects the corroboration; the CW-005 match on the

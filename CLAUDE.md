@@ -117,9 +117,11 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
 - Design rules: unparsable records are counted, never fatal; minimal dependencies
   (offline DFIR boxes); all timestamps UTC.
 - `samples/` is gitignored — local EVTX test data lives there, and the benchmark's tool
-  releases under `samples/tools/` (Hayabusa 4.1.0, Chainsaw 2.16.5, SHA-256 in
-  docs/BENCHMARK.md). `scripts/benchmark.py` reruns the comparison (a few minutes) into
-  docs/benchmark/results.json; `--folder .` runs a whole corpus (subfolders grouped),
+  releases under `samples/tools/` (first run: `hayabusa/` 4.1.0 and `chainsaw/chainsaw/`
+  2.16.5; rerun: `hayabusa-4.2.0/` and `chainsaw-2.17.1/chainsaw/`, which fix the escaped
+  `\\*\IPC$` bug; SHA-256 in docs/BENCHMARK.md). `scripts/benchmark.py` reruns the comparison
+  (minutes per corpus) into `--out` (docs/benchmark/results*.json: one file per corpus and
+  engine pair, the first run's kept); `--folder .` runs a whole corpus (subfolders grouped),
   `--reuse OLD.json` keeps the engines' rows and reruns only crabwalk. Second corpus
   (hold-out) = `samples\EVTX-to-MITRE-Attack` (mdecrevoisier, CC0): never design or tune a
   rule on its records; `results-evtx-to-mitre-attack-blind.json` is the run before any change,
@@ -127,5 +129,6 @@ Conversation with the user is in Turkish; code, comments and docs stay in Englis
   (only CW-016's dev sample; no licence stated: local use, never vendor it). Never write the tools' raw alerts to disk: they copy the
   samples' malware command lines and Windows Defender flags/quarantines such files —
   parse stdout in memory (the script does). Hayabusa's channel filter skips Sigma rules
-  without a Channel: run raw rules with `-A`. Chainsaw rejects `|re|i` (see sigma/README).
+  without a Channel: run raw rules with `-A`. Chainsaw before 2.17.1 rejects `|re|i` (see
+  sigma/README).
 - Roadmap lives in README.md — keep the checkboxes current as steps land.

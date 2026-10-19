@@ -4,7 +4,9 @@
 This page runs them. Each tool went over the same 47 recordings with the rules its release
 ships, and the same yardstick was applied to all three outputs. The raw per-file numbers are
 in [`benchmark/results.json`](benchmark/results.json). [`scripts/benchmark.py`](../scripts/benchmark.py)
-reproduces them.
+reproduces them. Both engines have since fixed a bug this benchmark found; the
+[rerun](#rerun-with-the-fixed-engines) with the fixed releases is at the end, and the sections
+before it report the first run as it was measured.
 
 **Read this first.** crabwalk's rules were written and validated against this same corpus
 ([DETECTIONS.md](DETECTIONS.md#how-the-rules-are-validated)). Hayabusa's and Chainsaw's were
@@ -34,7 +36,9 @@ that alert tagged as lateral movement.
   - Chainsaw's documented `-s sigma/` loads SigmaHQ's whole tree, including its
     `deprecated/`, `unsupported/` and `other/` folders, which Hayabusa leaves off.
   - Both choices favour the engines' breadth. Their effect is given below each finding.
-- **When and where:** run on 2026-10-08, Windows 11, Python 3.12.
+- **When and where:** run on 2026-10-08, Windows 11, Python 3.12. The
+  [rerun](#rerun-with-the-fixed-engines) with Hayabusa 4.2.0 and Chainsaw 2.17.1 ran on
+  2026-10-19 on the same machine.
 - **Same yardstick for every tool:**
   - *medium+*: an alert at level medium, high or critical. Hayabusa's "emergency" counts as
     critical.
@@ -57,8 +61,9 @@ test of them. CW-016, added later from another corpus, does not fire on this one
 | Alerts, all levels | 34 | 41 | 1,221 (1,038 informational) | 180 |
 | Most alerts at medium+ in one file | 5 | 5 | 24 | 26 |
 
-A rerun of the two engines on the same files gave the same numbers. How the settings move
-them:
+Running Hayabusa 4.1.0 and Chainsaw 2.16.5 a second time on the same files gave the same
+numbers (a repeatability check; the [rerun with the fixed releases](#rerun-with-the-fixed-engines)
+is at the end). How the settings move them:
 
 - **Hayabusa without its experimental rules** (`-w --exclude-status experimental`):
   27 files at medium+, 7 with a lateral alert, 107 alerts at medium+.
@@ -86,8 +91,10 @@ Twelve of those files are still engine-only. Hayabusa or Chainsaw flag them, mos
 Sysmon process, image-load and registry rules. For unknown evidence, start with one of them.
 
 **Target-side share and WinRM logs go to crabwalk.** On five files, crabwalk raised a medium+
-alert and neither other tool did, in both runs. Four are a target host's Security log of
-share access (5145); one is its WinRM/Operational log:
+alert and neither Hayabusa 4.1.0 nor Chainsaw 2.16.5 did, both at commit `9d23709` and now.
+Four are a target host's Security log of share access (5145); one is its WinRM/Operational
+log. With the fixed releases it is four: both engines now alert on
+`LM_renamed_psexecsvc_5145.evtx` ([rerun](#rerun-with-the-fixed-engines)).
 
 | File | crabwalk | Hayabusa | Chainsaw |
 |---|---|---|---|
@@ -129,7 +136,11 @@ reads `ShareName|endswith: 'IPC$'`, both engines fire on the same three stdio-pi
 (EventRecordID 84050 to 84052). So the miss is
 in how the escaped value is matched, not missing coverage. crabwalk reports the run as
 critical and names the source host, NLLT108334 at 10.0.2.16. The
-[write-up](writeups/01-renamed-psexec-source-host.md) works this case end to end.
+[write-up](writeups/01-renamed-psexec-source-host.md) works this case end to end. Reported as
+[hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932) and
+[chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245); Hayabusa 4.2.0
+and Chainsaw 2.17.1 fix it, and the [rerun](#rerun-with-the-fixed-engines) shows what that
+changes.
 
 **PsExec run against its own host (`DE_renamed_psexec_service_sysmon_17_18.evtx`, from the
 corpus's Defense Evasion folder).** crabwalk reports a medium *local* execution with no
@@ -149,7 +160,8 @@ and `LM_WMI_4624_4688_TargetHost.evtx`).**
   apart. The records do not show that they are one hop.
 
 **The nine demo recordings together (`demo/evtx`).** Over the demo set crabwalk raises 13
-alerts (14 in the first run, before CW-003 grouped a burst), Hayabusa 125 and Chainsaw 57, of which Hayabusa and Chainsaw each rate 40 medium+.
+alerts (14 in the first run, before CW-003 grouped a burst), Hayabusa 125 and Chainsaw 57, of which Hayabusa and Chainsaw each rate 40 medium+
+(with the fixed releases, 132 and 65, of which 47 and 48 medium+).
 Only crabwalk links hosts into a path, NLLT108334 → PC01 → WIN-77LTAPHIQ1R. That path shows
 what the linking does, not proof of an intrusion:
 
@@ -162,7 +174,8 @@ what the linking does, not proof of an intrusion:
 ## Speed, for context
 
 Median of three runs over the whole corpus (278 files, 37,364 records) on the same machine,
-each tool started as a process:
+each tool started as a process (Hayabusa 4.1.0, Chainsaw 2.16.5; the rerun's timings are in
+[its section](#rerun-with-the-fixed-engines)):
 
 | crabwalk (`crabwalk hunt`) | Hayabusa | Chainsaw |
 |---|---|---|
@@ -271,7 +284,8 @@ CW-016 scored blind below), and 56 of the 293 files, 20 with a lateral alert, wi
 all (180 blind). In the attack steps 6 files carry a lateral alert, since the local PsExec run
 no longer does. On that folder crabwalk now matches Hayabusa's 6 lateral files and passes
 Chainsaw's 5. Hayabusa still flags more files at medium+ (11); Chainsaw flags as many as
-crabwalk (7).
+crabwalk (7). Against the fixed releases the tie is gone: Hayabusa 4.2.0 has 8
+([rerun](#rerun-with-the-fixed-engines)).
 
 **A rule scored blind: CW-016.** The second corpus's lateral-movement misses included RDP
 session hijacking with `tscon`. CW-016 was written for it the way the corpus should be used:
@@ -297,6 +311,135 @@ the install twice in one line. Here CW-012's pipe activity holds opens by two ac
 `10.23.123.11` (`hack1` on a random-named pipe, `admmhorvath` on `svcctl`) and it names
 `hack1`, while CW-001 names `admmhorvath` from the 4624 that preceded the install.
 
+## Rerun with the fixed engines
+
+Both engines fixed the matching bug this benchmark found ([Cases](#cases)): Hayabusa in
+4.2.0 ([hayabusa#1932](https://github.com/Yamato-Security/hayabusa/issues/1932)), Chainsaw in
+2.17.1 ([chainsaw#245](https://github.com/WithSecureOpenSource/chainsaw/issues/245), "Fixes
+incorrect Sigma translation when dealing with regex conversion" in its release notes). On
+2026-10-19 both corpora were run again with those releases: the same invocations, the same
+yardstick, every file on its own. crabwalk was unchanged, and so were its numbers. Each
+release changes more than the fix (Chainsaw 2.17.1, for one, adds initial support for Sigma's
+`windash` modifier), so not every change below comes from the fix. The sections above are
+the first run, as it was measured.
+
+| | Version | Rules |
+|---|---|---|
+| Hayabusa | 4.2.0, `hayabusa-4.2.0-win-x64.zip` | 4,674 loaded (4,490 Sigma, the rest Hayabusa's own), 380 of them experimental; noisy, deprecated and unsupported rules off, as shipped |
+| Chainsaw | 2.17.1, `chainsaw_all_platforms+rules.zip` | 3,863 loaded |
+
+- **Release integrity.** Both archives match the SHA-256 digests GitHub publishes for them. No
+  rule update was run.
+  - Hayabusa: `e8e49805bf94f5feb425cffae904f526257c1b6bf8dedfa07c28e9aa585a387b`
+  - Chainsaw: `74b9ea341e31c0a704a79c0e779c2f6e31670f1f43cad3b450b21a91639dbec3`
+- **Raw numbers:**
+  [`benchmark/results-hayabusa-4.2.0-chainsaw-2.17.1.json`](benchmark/results-hayabusa-4.2.0-chainsaw-2.17.1.json)
+  (first corpus) and
+  [`benchmark/results-evtx-to-mitre-attack-hayabusa-4.2.0-chainsaw-2.17.1.json`](benchmark/results-evtx-to-mitre-attack-hayabusa-4.2.0-chainsaw-2.17.1.json)
+  (second corpus).
+
+**What the fix revived.** In the SigmaHQ rules both releases bundle, eight rules match a
+5145's `ShareName` against an escaped value (`\\\\\*\\IPC$`, or `\\\\\*\\ADMIN$` in one),
+and three process-creation rules match a UNC path written `\\\\*\\*` in a command-line
+value. None of the eight 5145 rules fired in the first run. The files of all eleven rules are
+the same in both releases of each engine (Chainsaw's CrackMapExec rule only gains a
+`regression_tests_path` line), so what changed on them is the matching. Files at medium+ over
+both corpora, first run → rerun:
+
+| SigmaHQ rule | Level | Hayabusa | Chainsaw | Where |
+|---|---|---|---|---|
+| *Suspicious PsExec Execution* | high | 0 → 1 | 0 → 1 | `LM_renamed_psexecsvc_5145.evtx` |
+| *First Time Seen Remote Named Pipe* | high | 0 → 3 | 0 → 4 | that file; in the second corpus `PSexec remote execution + admin share` and the attack step `SAM the admin (CVE-2021-42287)`; Chainsaw also the first corpus's local pass-the-hash file |
+| *Possible Impacket SecretDump Remote Activity* | high | 0 → 3 | 0 → 3 | second corpus: `Impacket secret dump via SMB`, `user file-credentials-browser dump via network share`, the attack step `DonPAPI full extraction` |
+| *DCERPC SMB Spoolss Named Pipe* | medium | 0 → 2 | 0 → 2 | `spoolsample_5145.evtx`, the second corpus's `Print spooler bug abuse` |
+| *CVE-2021-1675 Print Spooler Exploitation IPC Access* | critical | 0 → 1 | 0 → 1 | `Print spooler bug abuse` |
+| *Windows Admin Share Mount Via Net.EXE* (process creation) | medium | 0 → 2 | 0 → 0 | second corpus: `Lateral movement with net use`, `SystemNightMare` |
+| *HackTool - CrackMapExec Execution Patterns* (process creation) | high | 2 → 7 | 2 → 7 | new: three impacket `wmiexec` recordings (one in the first corpus), the second corpus's `atexec` step and `smbmap_upload_exec_sysmon.evtx` |
+
+Three of the eight 5145 rules (*Impacket PsExec Execution*, *Remote Task Creation via ATSVC
+Named Pipe*, *Remote Service Activity via SVCCTL Named Pipe*) and the process-creation *Copy
+From Or To Admin Share Or Sysvol Folder* fire on none of these files.
+
+The fix also reaches rules outside the table, whose files are likewise unchanged. Hayabusa
+4.2.0 now raises *Rundll32 UNC Path Execution* (escaped backslashes, no `*`) on
+`smbmap_upload_exec_sysmon.evtx`. It no longer raises *Greedy File Deletion Using Del*, which
+looks for a literal `\*.dll`, on the `SAM the admin` step, where 4.1.0 matched the escaped `*`
+as a wildcard. Hayabusa's release notes say the fix "restores real PsExec detections for
+bundled Security EID 5145 rules and prevents related false positives".
+
+**First corpus.**
+
+| Over the 47 files | crabwalk now | Hayabusa 4.1.0 → 4.2.0 | Chainsaw 2.16.5 → 2.17.1 |
+|---|---|---|---|
+| Files with an alert at medium+ | 22 | 29 → **31** | 27 → 29 |
+| Files with a *lateral* alert at medium+ | **16** | 8 → 10 | 6 → 9 |
+| Alerts at medium+ | 41 | 130 → 145 | 110 → 132 |
+| Alerts, all levels | 41 | 1,221 → 1,236 | 180 → 202 |
+| Most alerts at medium+ in one file | 5 | 24 → 24 | 26 → 27 |
+
+- **The lateral gains come from the fix.** Both engines now raise lateral alerts on
+  `LM_renamed_psexecsvc_5145.evtx`, seven high alerts each on four records, one per rule and
+  record: *Suspicious PsExec Execution* on EventRecordID 84050 to 84052 and *First Time Seen
+  Remote Named Pipe* on 84047 and 84050 to 84052. Both also flag `spoolsample_5145.evtx`, and Chainsaw the local
+  pass-the-hash file.
+- **The rest are on Sysmon process creation, from rule files that did not change:** the
+  CrackMapExec pattern on the `wmiexec` and `smbmap` recordings and, in Hayabusa,
+  *Rundll32 UNC Path Execution* (both above); in Chainsaw, two `whoami` rules, an Explorer
+  process-tree break and a `cmd` started with hidden-start flags, three of these four through
+  rules that use the `windash` modifier.
+- **The settings move them as before.** Hayabusa 4.2.0 without its experimental rules: 29
+  files at medium+, 9 with a lateral alert, 122 alerts at medium+. Chainsaw 2.17.1 without
+  SigmaHQ's `deprecated/`, `unsupported/` and `other/`: 176 alerts, 123 at medium+, at most 24
+  in one file, and no file changes status.
+- **crabwalk alone now alerts on four files, not five:** the three other target-side share
+  logs (`LM_5145_Remote_FileCopy`, `LM_REMCOM_5145_TargetHost`,
+  `LM_Remote_Service01_5145_svcctl`) and the WinRM log. On the renamed PsExec the engines now
+  alert too. crabwalk still raises one finding there instead of seven, and it is the only tool
+  that turns the pipe name into the source host's name.
+- **The lateral row.** Hayabusa 4.2.0's 10 files equal crabwalk's first run. crabwalk's 16
+  includes the rules written from this corpus's misses (see [Results](#results)).
+
+**Second corpus.** crabwalk's column is its state after the changes listed above, unchanged
+by the rerun.
+
+| | crabwalk now | Hayabusa 4.1.0 → 4.2.0 | Chainsaw 2.16.5 → 2.17.1 |
+|---|---|---|---|
+| `TA0008-Lateral Movement` (18 files): files with an alert at medium+ | 7 | 11 → **12** | 7 → 7 |
+| ... files with a *lateral* alert at medium+ | 6 | 6 → **8** | 5 → 5 |
+| ... alerts at medium+ | 8 | 130 → 135 | 13 → 17 |
+| `EVTX_full_APT_attack_steps` (11 files): files with a *lateral* alert at medium+ | 6 | **7** → **7** | 4 → 4 |
+| All 293 files: files with an alert at medium+ | 56 | 148 → **151** | 117 → 125 |
+| ... files with a *lateral* alert at medium+ | 20 | 27 → **30** | 15 → 16 |
+| ... alerts at medium+ | 72 | 2,000 → 2,029 | 1,352 → 1,645 |
+| ... alerts, all levels | 72 | 7,860 → 7,889 | 1,903 → 2,198 |
+
+**The tie on the lateral-movement folder is gone.** With 4.1.0, crabwalk's 6 lateral files
+matched Hayabusa's 6. Hayabusa 4.2.0 has 8:
+
+- `PSexec remote execution + admin share`, through *First Time Seen Remote Named Pipe*, so
+  from the fix. crabwalk alerts on that file too.
+- `Lateral movement with net use`, through *Windows Admin Share Mount Via Net.EXE*, one of the
+  process-creation rules in the table above. crabwalk has no rule for that file.
+
+Chainsaw keeps its 5. Outside the folder Hayabusa adds one lateral file (the same `net use`
+rule) and Chainsaw one (the print spooler file). Chainsaw's alert volume grows the most, by
+293 alerts at medium+. 244 of them are on one Execution recording, `Payload deployed via
+service`, from *Suspicious Service Installation Script*, a `windash` rule whose file did not
+change; 17 are *Potential AD User Enumeration From Non-Machine Account*, whose unchanged values
+use the `?` wildcard.
+
+**What did not change.** The engines' lateral alerts on the three RDP-hijack recordings
+scored for CW-016 are the same as in the first run. Hayabusa still has 7 lateral files in the
+attack steps, Chainsaw 4.
+
+**The nine demo recordings.** Hayabusa 4.2.0 raises 132 alerts, 47 at medium+; Chainsaw
+2.17.1 raises 65, 48 at medium+. The first releases raised 125 and 57, 40 at medium+ each.
+crabwalk raises 13.
+
+**Speed.** Median of three runs over the whole first corpus, on an idle machine, each tool
+started as a process, output discarded: crabwalk 0.8 s, Hayabusa 4.2.0 6.8 s, Chainsaw 2.17.1
+15.2 s. The first run measured 1.0, 6.5 and 13.4 s. The same caveats apply.
+
 ## What this does not show
 
 - **Detection quality in the wild.** These are lab recordings, one technique each, so there
@@ -310,15 +453,24 @@ the install twice in one line. Here CW-012's pipe activity holds opens by two ac
 
 ## Reproduce
 
-Download both releases from their GitHub pages, check the SHA-256 digests above, and unpack
-them under `samples/tools/` (gitignored). Then run, one command per line:
+Download the releases from their GitHub pages (Hayabusa 4.1.0 and Chainsaw 2.16.5 for the
+first run, 4.2.0 and 2.17.1 for the rerun), check the SHA-256 digests above, and unpack them
+under `samples/tools/` (gitignored), one folder per release. Then run, one command per line
+(the second corpus is a clone of
+[EVTX-to-MITRE-Attack](https://github.com/mdecrevoisier/EVTX-to-MITRE-Attack) under
+`samples/`):
 
 ```bash
 git clone --depth 1 https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES.git samples/EVTX-ATTACK-SAMPLES
+git clone https://github.com/mdecrevoisier/EVTX-to-MITRE-Attack.git samples/EVTX-to-MITRE-Attack
+git -C samples/EVTX-to-MITRE-Attack checkout 4748560
 python scripts/benchmark.py --samples samples/EVTX-ATTACK-SAMPLES --hayabusa samples/tools/hayabusa --chainsaw samples/tools/chainsaw/chainsaw
+python scripts/benchmark.py --samples samples/EVTX-ATTACK-SAMPLES --hayabusa samples/tools/hayabusa-4.2.0 --chainsaw samples/tools/chainsaw-2.17.1/chainsaw --skip-timing --out docs/benchmark/results-hayabusa-4.2.0-chainsaw-2.17.1.json
+python scripts/benchmark.py --samples samples/EVTX-to-MITRE-Attack --folder . --hayabusa samples/tools/hayabusa-4.2.0 --chainsaw samples/tools/chainsaw-2.17.1/chainsaw --skip-timing --out docs/benchmark/results-evtx-to-mitre-attack-hayabusa-4.2.0-chainsaw-2.17.1.json
 ```
 
 The script reads every tool's output from stdout and writes only counts, levels, rule titles
 and tags. The samples contain real malware command lines, which the tools copy into their
-output, and antivirus software flags such files. A run takes a few minutes, about 2 s per
-file each for Hayabusa and Chainsaw. The timings above came from separate runs.
+output, and antivirus software flags such files. A run over the 47 files takes a few minutes,
+about 2 s per file each for Hayabusa and Chainsaw; the second corpus's 293 files take 20
+minutes or more. The timings above came from separate runs.
